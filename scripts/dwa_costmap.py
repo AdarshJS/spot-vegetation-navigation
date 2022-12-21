@@ -37,8 +37,6 @@ import cv2
 sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
 
 
-CORRIDOR_COST = 50
-
 class Config():
     # simulation parameters
 
@@ -51,8 +49,8 @@ class Config():
         self.max_yawrate = 0.4  # [rad/s]
         self.max_accel = 1  # [m/ss]
         self.max_dyawrate = 3.2  # [rad/ss]
-        self.v_reso = 0.15  # [m/s]
-        self.yawrate_reso = 0.05  # [rad/s]
+        self.v_reso = 0.10  # [m/s]
+        self.yawrate_reso = 0.10  # [rad/s]
         self.dt = 0.5  # [s]
         self.predict_time = 1.5  # [s]
         self.to_goal_cost_gain = 1.2 #2.4 #lower = detour
@@ -67,9 +65,12 @@ class Config():
         self.r = rospy.Rate(20)
 
         # Costmap
+        self.scale_percent = 300 # percent of original size
         self.costmap_shape = (200, 200)
         self.costmap_resolution = 0.05
+        print("Initialized Costmap!")
         self.costmap_baselink = np.zeros(self.costmap_shape, dtype=np.uint8)
+        self.costmap_rgb = cv2.cvtColor(self.costmap_baselink,cv2.COLOR_GRAY2RGB)
 
 
     # Callback for Odometry
@@ -100,8 +101,8 @@ class Config():
         self.goalX =  self.x + goalX_rob*math.cos(self.th) - goalY_rob*math.sin(self.th)
         self.goalY = self.y + goalX_rob*math.sin(self.th) + goalY_rob*math.cos(self.th)
         
-        print("Self odom:",self.x, self.y)
-        print("Goals wrt odom frame:", self.goalX, self.goalY)
+        # print("Self odom:",self.x, self.y)
+        # print("Goals wrt odom frame:", self.goalX, self.goalY)
 
         # If goal is published as x, y coordinates wrt odom uncomment this
         # self.goalX = data.linear.x
@@ -125,10 +126,16 @@ class Config():
 
         cm_baselink_pil = cm_image.rotate(-yaw_deg)
         self.costmap_baselink = np.array(cm_baselink_pil)
+        self.costmap_rgb = cv2.cvtColor(self.costmap_baselink,cv2.COLOR_GRAY2RGB)
+
         
-        # Visualization
-        cv2.imshow('costmap_wrt_robot', self.costmap_baselink)
-        cv2.waitKey(3)
+        # # Visualization
+        # dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), \
+        #  int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
+        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        
+        # cv2.imshow('costmap_wrt_robot', resized)
+        # cv2.waitKey(3)
 
 
 
@@ -266,6 +273,7 @@ def calc_trajectory(xinit, v, y, config):
 
     return traj
 
+
 # Calculate trajectory, costings, and return velocities to apply to robot
 def calc_final_input(x, u, dw, config, ob):
 
@@ -273,10 +281,13 @@ def calc_final_input(x, u, dw, config, ob):
     min_cost = 10000.0
     min_u = u
     min_u[0] = 0.0
+    yellow = (0, 255, 255)
+    green = (0, 255, 0)
 
     # evaluate all trajectory with sampled input in dynamic window
     for v in np.arange(dw[0], dw[1], config.v_reso):
         for w in np.arange(dw[2], dw[3], config.yawrate_reso):
+            
             traj = calc_trajectory(xinit, v, w, config)
 
             # calc costs with weighted gains
@@ -291,11 +302,55 @@ def calc_final_input(x, u, dw, config, ob):
 
             final_cost = to_goal_cost + speed_cost + ob_cost + social_cost
 
+            
+            config.costmap_rgb = draw_traj(config, traj, yellow)
+
             # search minimum trajectory
             if min_cost >= final_cost:
                 min_cost = final_cost
                 min_u = [v, w]
+
+    print("min_u = ", min_u)
+    traj = calc_trajectory(xinit, min_u[0], min_u[1], config)
+    config.costmap_rgb = draw_traj(config, traj, green)
+
+    # Visualization
+    dim = (int(config.costmap_baselink.shape[1] * config.scale_percent / 100), \
+     int(config.costmap_baselink.shape[0] * config.scale_percent / 100)) 
+    resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+    
+    cv2.imshow('costmap_wrt_robot', resized)
+    cv2.waitKey(3)
     return min_u
+
+
+def draw_traj(config, traj, color):
+    traj_array = np.asarray(traj)
+    x_odom_list = np.asarray(traj_array[:, 0])
+    y_odom_list = np.asarray(traj_array[:, 1])
+
+    # print(x_odom_list.shape)
+
+    x_rob_list, y_rob_list = odom_to_robot(config, x_odom_list, y_odom_list)
+    cm_col_list, cm_row_list = robot_to_costmap(config, x_rob_list, y_rob_list)
+
+    costmap_traj_pts = np.array((cm_col_list.astype(int), cm_row_list.astype(int))).T
+    # print(costmap_traj_pts) 
+
+    costmap_traj_pts = costmap_traj_pts.reshape((-1, 1, 2))
+
+    config.costmap_rgb = cv2.polylines(config.costmap_rgb, [costmap_traj_pts], False, color, 1)
+
+
+    # print([cm_col_list.astype(int), cm_row_list.astype(int)])
+    # for i in range(cm_row_list.shape[0]):
+    #     config.costmap_rgb[cm_row_list.astype(int)[i], cm_col_list.astype(int)[i]] = color
+
+    
+
+    return config.costmap_rgb
+    
+
 
 # Calculate obstacle cost inf: collision, 0:free
 def calc_obstacle_cost(traj, ob, config):
@@ -347,27 +402,48 @@ def calc_to_goal_cost(traj, config):
 
 
 def calc_social_cost(traj, config):
-    # print("Trajectory end-points wrt odom", traj[-1, 0], traj[-1, 1])
 
     # Convert traj points to robot frame
-    x_end_odom = traj[-1, 0]
-    y_end_odom = traj[-1, 1]
+    x_end_odom = np.array([traj[-1, 0]])
+    y_end_odom = np.array([traj[-1, 1]])
 
-    x_end_rob = (x_end_odom - config.x)*math.cos(config.th) + (y_end_odom - config.y)*math.sin(config.th)
-    y_end_rob = -(x_end_odom - config.x)*math.sin(config.th) + (y_end_odom - config.y)*math.cos(config.th)
-    # print("Trajectory end-points wrt robot:", x_end_rob, y_end_rob)
-
-    cm_col = config.costmap_shape[0]/2 - math.floor(y_end_rob/config.costmap_resolution)
-    cm_row = config.costmap_shape[1]/2 - math.floor(x_end_rob/config.costmap_resolution)
-
-    # print("Costmap coordinates of end-points: ", (int(cm_row), int(cm_col)))
-
-    # print("Max and min of costmap: ", np.max(config.costmap_baselink), np.min(config.costmap_baselink))
+    x_end_rob, y_end_rob = odom_to_robot(config, x_end_odom, y_end_odom)
+    
+    cm_col, cm_row = robot_to_costmap(config, x_end_rob, y_end_rob)
 
     social_cost = config.costmap_baselink[int(cm_col), int(cm_row)]
+
+    # print("Max and min of costmap: ", np.max(config.costmap_baselink), np.min(config.costmap_baselink))
     # print("Social cost:", social_cost)
 
     return social_cost
+
+
+def odom_to_robot(config, x_odom, y_odom):
+    
+    x_rob_odom_list = np.asarray([config.x for i in range(x_odom.shape[0])])
+    y_rob_odom_list = np.asarray([config.y for i in range(y_odom.shape[0])])
+
+    x_rob = (x_odom - x_rob_odom_list)*math.cos(config.th) + (y_odom - y_rob_odom_list)*math.sin(config.th)
+    y_rob = -(x_odom - x_rob_odom_list)*math.sin(config.th) + (y_odom - y_rob_odom_list)*math.cos(config.th)
+    # print("Trajectory end-points wrt robot:", x_rob, y_rob)
+
+    return x_rob, y_rob
+
+
+def robot_to_costmap(config, x_rob, y_rob):
+
+    costmap_shape_list_0 = [config.costmap_shape[0]/2 for i in range(y_rob.shape[0])]
+    costmap_shape_list_1 = [config.costmap_shape[1]/2 for i in range(x_rob.shape[0])]
+
+    y_list = [math.floor(y/config.costmap_resolution) for y in y_rob]
+    x_list = [math.floor(x/config.costmap_resolution) for x in x_rob]
+
+    cm_col = np.asarray(costmap_shape_list_0) - np.asarray(y_list)
+    cm_row = np.asarray(costmap_shape_list_1) - np.asarray(x_list)
+    # print("Costmap coordinates of end-points: ", (int(cm_row), int(cm_col)))
+
+    return cm_col, cm_row
 
 
 # Begin DWA calculations
@@ -380,11 +456,11 @@ def dwa_control(x, u, config, ob):
 
     return u
 
+
 # Determine whether the robot has reached its goal
 def atGoal(config, x):
     # check at goal
-    if math.sqrt((x[0] - config.goalX)**2 + (x[1] - config.goalY)**2) \
-        <= config.robot_radius:
+    if math.sqrt((x[0] - config.goalX)**2 + (x[1] - config.goalY)**2) <= config.robot_radius:
         return True
     return False
 
@@ -402,11 +478,13 @@ def main():
     subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
     subCostmap = rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
     pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-    
+    # pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
+
     speed = Twist()
     
     # initial state [x(m), y(m), theta(rad), v(m/s), omega(rad/s)]
     x = np.array([config.x, config.y, config.th, 0.0, 0.0])
+    
     # initial linear and angular velocities
     u = np.array([0.0, 0.0])
 
@@ -449,5 +527,5 @@ def main():
 
 
 if __name__ == '__main__':
-    rospy.init_node('dwa-costmap')
+    rospy.init_node('dwa_costmap')
     main()

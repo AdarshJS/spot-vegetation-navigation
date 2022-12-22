@@ -15,13 +15,14 @@ def make_pairs(images, labels):
 	numClasses = len(np.unique(labels))
 	idx = [np.where(labels == i)[0] for i in range(0, numClasses)]
 
-	print(len(idx[9])) # 10 rows, and each row has a list of indices 
+	# print(len(idx[9])) # 10 rows, and each row has a list of indices 
 
 	# loop over all images
 	for idxA in range(len(images)):
 		# grab the current image and label belonging to the current
 		# iteration
 		currentImage = images[idxA]
+		print("Image type: ", type(currentImage))
 		label = labels[idxA]
 
 		# randomly pick an image that belongs to the *same* class

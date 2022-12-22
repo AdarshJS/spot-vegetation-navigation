@@ -333,6 +333,9 @@ class CusDropout(tf.keras.layers.Layer):
 
 def MobileNetV3(type="large", input_shape=(224, 224, 3), classes_number=1000, width_multiplier=1.0,
                 divisible_by=8, l2_reg=2e-5, dropout_rate=0.2, name="MobileNetV3"):
+    
+
+    print("[INFO]: In MobileNetV3!")
     spec = _available_mobilenetv3_spec[type]
     spec[-1][3] = classes_number  # bottlenet layer size or class numbers
     name = name + "_" + type
@@ -380,15 +383,16 @@ custom_objects = {
 
 
 if __name__ == "__main__":
+    print("MobileNetV3 Imported!")
     # if you use gpu device
     # for gpu in tf.config.experimental.list_physical_devices('GPU'):
     #     tf.compat.v2.config.experimental.set_memory_growth(gpu, True)
 
-    embeddingDim = 500
+    # embeddingDim = 500
 
-    model = MobileNetV3(type="feature", input_shape=(224, 224, 3), classes_number=embeddingDim)
+    # model = MobileNetV3(type="feature", input_shape=(224, 224, 3), classes_number=embeddingDim)
 
-    model.summary()
+    # model.summary()
 
     # model = MobileNetV3(type="small")
 

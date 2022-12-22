@@ -17,29 +17,28 @@ sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
 
 from PIL import Image
 
-def make_pairs(folder_list):
+def make_pairs(folder_list, numClasses, image_dims):
 	# initialize two empty lists to hold the (image, image) pairs and
 	# labels to indicate if a pair is positive or negative
 	pairImages = []
 	pairLabels = []
 
-	numClasses = 4 # grass-dense, grass-sparse, trees, bushes
-	image_dims = (320, 180)
-
 	for i in range(numClasses):
+		print("Class: ", i)
 		current_folder = folder_list[i]
 		for idxA in range(len([name for name in os.listdir(folder_list[i])])):
-			# currentImage = random.choice(os.listdir(current_folder))
 			
 			current_image_name = os.listdir(current_folder)[idxA]
-			# currentImage = cv2.imread(current_folder + "/" + current_image_name)
 			currentImage = Image.open(current_folder + "/" + current_image_name)
 			currentImage = currentImage.resize(image_dims)
+			currentImage = np.array(currentImage)
+			currentImage = currentImage / 255.0 # Normalize between 0-1
 
 			pos_image_name = random.choice(os.listdir(current_folder)) # pick a random image from the same folder
-			# posImage = cv2.imread(current_folder + "/" + pos_image_name)
 			posImage = Image.open(current_folder + "/" + pos_image_name)
 			posImage = posImage.resize(image_dims)
+			posImage = np.array(posImage)
+			posImage = posImage / 255.0
 
 			# prepare a positive pair and update the images and labels lists, respectively
 			pairImages.append([currentImage, posImage]) # appending a tuple
@@ -49,23 +48,24 @@ def make_pairs(folder_list):
 			
 			negIdx = random.choice([j for j in folder_idx if j != i])
 			neg_image_name = random.choice(os.listdir(folder_list[negIdx]))
-			# negImage = cv2.imread(folder_list[negIdx] + "/" + neg_image_name)
 			negImage = Image.open(folder_list[negIdx] + "/" + neg_image_name)
 			negImage = negImage.resize(image_dims)
+			negImage = np.array(negImage)
+			negImage = negImage / 255.0
 
 			# prepare a negative pair of images and update our lists
 			pairImages.append([currentImage, negImage])
 			pairLabels.append([0])
 
-			# Sanity check
-			pos_pair = np.concatenate((currentImage, posImage), axis=0)
-			neg_pair = np.concatenate((currentImage, negImage), axis=0)
+			# # Sanity check
+			# pos_pair = np.concatenate((currentImage, posImage), axis=0)
+			# neg_pair = np.concatenate((currentImage, negImage), axis=0)
 
-			# Convert PIL to Opencv image
-			pos_pair = pos_pair[:, :, ::-1].copy() 
-			neg_pair = neg_pair[:, :, ::-1].copy() 
+			# # Convert PIL to Opencv image
+			# pos_pair = pos_pair[:, :, ::-1].copy() 
+			# neg_pair = neg_pair[:, :, ::-1].copy() 
 
-			# Visualization
+			# # Visualization
 			# cv2.imshow('Positive pair', pos_pair)
 			# cv2.imshow('Negative pair', neg_pair)
 			# cv2.waitKey(500)

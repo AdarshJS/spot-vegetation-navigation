@@ -19,6 +19,8 @@ print("[INFO] loading MNIST dataset...")
 trainX = trainX / 255.0
 testX = testX / 255.0
 
+print("Dim of trainX:", trainX.shape)
+
 # add a channel dimension to the images
 trainX = np.expand_dims(trainX, axis=-1)
 testX = np.expand_dims(testX, axis=-1)

@@ -59,10 +59,18 @@ class Config():
         self.robot_radius = 0.6  # [m]
         self.x = 0.0
         self.y = 0.0
+        self.v_x = 0.0
+        self.w_z = 0.0
         self.goalX = 0.0006
         self.goalY = 0.0006
         self.th = 0.0
         self.r = rospy.Rate(20)
+
+        # DWA output
+        self.min_u = []
+
+        self.stuck_locations = []
+
 
         # Costmap
         self.scale_percent = 300 # percent of original size
@@ -83,6 +91,11 @@ class Config():
         
         # (roll,pitch,theta) = euler_from_quaternion ([rot_q.z, -rot_q.x, -rot_q.y, rot_q.w]) # used when lego-loam is used
         self.th = theta
+
+        # Get robot's current velocities
+        self.v_x = msg.twist.twist.linear.x
+        self.w_z = msg.twist.twist.angular.z 
+        # print("Robot's current velocities", [self.v_x, self.w_z])
 
 
     # Callback for goal from POZYX
@@ -136,7 +149,6 @@ class Config():
         
         # cv2.imshow('costmap_wrt_robot', resized)
         # cv2.waitKey(3)
-
 
 
 
@@ -279,8 +291,9 @@ def calc_final_input(x, u, dw, config, ob):
 
     xinit = x[:]
     min_cost = 10000.0
-    min_u = u
-    min_u[0] = 0.0
+    config.min_u = u
+    config.min_u[0] = 0.0
+    
     yellow = (0, 255, 255)
     green = (0, 255, 0)
 
@@ -308,10 +321,11 @@ def calc_final_input(x, u, dw, config, ob):
             # search minimum trajectory
             if min_cost >= final_cost:
                 min_cost = final_cost
-                min_u = [v, w]
+                config.min_u = [v, w]
 
-    print("min_u = ", min_u)
-    traj = calc_trajectory(xinit, min_u[0], min_u[1], config)
+    print("min_u = ", config.min_u)
+    print("Robot's current velocities", [config.v_x, config.w_z])
+    traj = calc_trajectory(xinit, config.min_u[0], config.min_u[1], config)
     config.costmap_rgb = draw_traj(config, traj, green)
 
     # Visualization
@@ -321,7 +335,7 @@ def calc_final_input(x, u, dw, config, ob):
     
     cv2.imshow('costmap_wrt_robot', resized)
     cv2.waitKey(3)
-    return min_u
+    return config.min_u
 
 
 def draw_traj(config, traj, color):
@@ -465,6 +479,19 @@ def atGoal(config, x):
     return False
 
 
+def is_robot_stuck(config):
+
+    # Condition for robot being stuck
+    # NOTE: This condition may need to be changed to change in position or orientation
+    print("Robot's stuck locations: ", config.stuck_locations)
+    if (config.min_u != [0, 0] and (abs(config.v_x) <= 0.05 and abs(config.w_z) <= 0.05)):
+        print("Robot could be stuck!")
+        if ([math.floor(config.x), math.floor(config.y)] not in config.stuck_locations):
+            config.stuck_locations.append([math.floor(config.x), math.floor(config.y)])
+
+        # Call recovery behaviors function
+
+
 
 
 def main():
@@ -477,8 +504,8 @@ def main():
     subLaser = rospy.Subscriber("/scan", LaserScan, obs.assignObs, config)
     subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
     subCostmap = rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
-    pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-    # pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
+    # pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+    pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
 
     speed = Twist()
     
@@ -491,6 +518,8 @@ def main():
 
     # runs until terminated externally
     while not rospy.is_shutdown():
+
+        is_robot_stuck(config)
 
         # Initial
         if config.goalX == 0.0006 and config.goalY == 0.0006:
@@ -511,6 +540,9 @@ def main():
             x[4] = u[1]
             speed.linear.x = x[3]
             speed.angular.z = x[4]
+
+        # elif (recovery behaviors):
+            # Publish velocities accordingly
 
         # If at goal then stay there until new goal published
         else:

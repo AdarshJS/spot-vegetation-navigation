@@ -1,0 +1,8 @@
+1_dataset/
+2_dataset_compiled/
+3_dataset_lite/
+4_dataset_cropped/
+5_dataset_final/
+rosbags/
+siamese_network/med_dataset/
+siamese_network/small_dataset/

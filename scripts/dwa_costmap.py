@@ -41,22 +41,49 @@ class Config():
     # simulation parameters
 
     def __init__(self):
+        
         # robot parameter
         #NOTE good params:
         #NOTE 0.55,0.1,1.0,1.6,3.2,0.15,0.05,0.1,1.7,2.4,0.1,3.2,0.18
-        self.max_speed = 0.65  # [m/s]
-        self.min_speed = 0.0  # [m/s]
-        self.max_yawrate = 0.4  # [rad/s]
+        # self.max_speed = 0.65  # [m/s]
+        # self.min_speed = 0.0  # [m/s]
+        # self.max_yawrate = 0.4  # [rad/s]
+        # self.max_accel = 1  # [m/ss]
+        # self.max_dyawrate = 3.2  # [rad/ss]
+        # self.v_reso = 0.10  # [m/s]
+        # self.yawrate_reso = 0.10  # [rad/s]
+        # self.dt = 0.5  # [s]
+        # self.predict_time = 1.5  # [s]
+        # self.to_goal_cost_gain = 1.2 #2.4 #lower = detour
+        # self.speed_cost_gain = 0.1 #lower = faster
+        # self.obs_cost_gain = 4.0 #3.2 #lower z= fearless
+        # self.robot_radius = 0.6  # [m]
+        # self.x = 0.0
+        # self.y = 0.0
+        # self.v_x = 0.0
+        # self.w_z = 0.0
+        # self.goalX = 0.0006
+        # self.goalY = 0.0006
+        # self.th = 0.0
+        # self.r = rospy.Rate(20)
+
+        self.max_speed = 0.5  # [m/s]
+        self.min_speed = 0.05  # [m/s]
+        self.max_yawrate = 0.6  # [rad/s]
         self.max_accel = 1  # [m/ss]
         self.max_dyawrate = 3.2  # [rad/ss]
-        self.v_reso = 0.10  # [m/s]
-        self.yawrate_reso = 0.10  # [rad/s]
+        
+        self.v_reso = 0.30 #0.15  # [m/s]
+        self.yawrate_reso = 0.15 #0.05  # [rad/s]
+        
         self.dt = 0.5  # [s]
-        self.predict_time = 1.5  # [s]
-        self.to_goal_cost_gain = 1.2 #2.4 #lower = detour
-        self.speed_cost_gain = 0.1 #lower = faster
-        self.obs_cost_gain = 4.0 #3.2 #lower z= fearless
-        self.robot_radius = 0.6  # [m]
+        self.predict_time = 3.0 #1.5  # [s]
+        
+        self.to_goal_cost_gain = 10.0 # lower = detour
+        self.speed_cost_gain = 10   # 0.1   # lower = faster
+        self.obs_cost_gain = 3.2     # lower z= fearless
+        
+        self.robot_radius = 0.3  # [m]
         self.x = 0.0
         self.y = 0.0
         self.v_x = 0.0
@@ -66,9 +93,13 @@ class Config():
         self.th = 0.0
         self.r = rospy.Rate(20)
 
+        self.collision_threshold = 0.3 # [m]
+
         # DWA output
         self.min_u = []
 
+        self.stuck_status = False
+        self.okay_locations = []
         self.stuck_locations = []
 
 
@@ -98,6 +129,7 @@ class Config():
         # print("Robot's current velocities", [self.v_x, self.w_z])
 
 
+
     # Callback for goal from POZYX
     def target_callback(self, data):
         print("---------------Inside Goal Callback------------------------")
@@ -122,6 +154,7 @@ class Config():
         # self.goalY = data.linear.y
 
 
+
     # Callback for local costmap from move_base and converting it wrt robot frame
     def costmap_callback(self, data):
 
@@ -143,16 +176,48 @@ class Config():
 
         
         # # Visualization
-        # dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), \
-        #  int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
-        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), \
+         int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
+        resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
         
-        # cv2.imshow('costmap_wrt_robot', resized)
-        # cv2.waitKey(3)
+        cv2.imshow('costmap_wrt_robot', resized)
+        cv2.waitKey(3)
 
 
 
-time_list = []
+    def classification_callback(self, data):
+
+        print("Received classification results!")
+
+        # Define grid cells belonging to each quadrant of the image
+        # top_left = []
+        # top_right = []
+        # bottom_left = []
+        # bottom_right = []
+
+        # Clear Costmap
+        # NOTE: Modify this based on the actual data being published
+        if (data[0] == "grass"):
+            self.costmap_baselink[top_left[:, 0], top_left[:, 1]] = 0  # instead of zero, maybe add a non-zero, weighted (based on confusion matrix) cost
+        else:
+            pass
+
+        if (data[1] == "grass"):
+            self.costmap_baselink[top_right[:, 0], top_right[:, 1]] = 0
+        else:
+            pass
+
+        if (data[2] == "grass"):
+            self.costmap_baselink[bottom_left[:, 0], bottom_left[:, 1]] = 0
+        else:
+            pass
+
+        if (data[3] == "grass"):
+            self.costmap_baselink[bottom_right[:, 0], bottom_right[:, 1]] = 0
+        else:
+            pass
+
+
 
 
 class Obstacles():
@@ -169,9 +234,6 @@ class Obstacles():
             yield i
             i += step
         yield end
-
-    def return_time_taken(self):
-        return self.time_list
 
 
     # Callback for LaserScan
@@ -297,23 +359,27 @@ def calc_final_input(x, u, dw, config, ob):
     yellow = (0, 255, 255)
     green = (0, 255, 0)
 
+    count = 0
     # evaluate all trajectory with sampled input in dynamic window
     for v in np.arange(dw[0], dw[1], config.v_reso):
         for w in np.arange(dw[2], dw[3], config.yawrate_reso):
+            count = count + 1 
             
             traj = calc_trajectory(xinit, v, w, config)
 
             # calc costs with weighted gains
-            to_goal_cost = calc_to_goal_cost(traj, config) * config.to_goal_cost_gain
-
+            to_goal_cost = config.to_goal_cost_gain * calc_to_goal_cost(traj, config)
+            speed_cost = config.speed_cost_gain * (config.max_speed - traj[-1, 3]) # end v should be as close to max_speed to have low cost
             social_cost = calc_social_cost(traj, config)
+            # ob_cost = config.obs_cost_gain * calc_obstacle_cost(traj, ob, config)
 
-            speed_cost = config.speed_cost_gain * \
-                (config.max_speed - traj[-1, 3])
 
-            ob_cost = calc_obstacle_cost(traj, ob, config) * config.obs_cost_gain
-
-            final_cost = to_goal_cost + speed_cost + ob_cost + social_cost
+            # final_cost = to_goal_cost + speed_cost + ob_cost + social_cost
+            final_cost = to_goal_cost + speed_cost + social_cost
+            
+            # print(count, "v,w = %.2f %.2f"% (v, w))
+            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "social_cost = %.2f"% social_cost, "final_cost = %.2f"% final_cost)
+            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "obs_cost = %.2f"% ob_cost, "social_cost = %.2f"% social_cost, "final_cost = %.2f"% final_cost)
 
             
             config.costmap_rgb = draw_traj(config, traj, yellow)
@@ -323,9 +389,11 @@ def calc_final_input(x, u, dw, config, ob):
                 min_cost = final_cost
                 config.min_u = [v, w]
 
-    print("min_u = ", config.min_u)
-    print("Robot's current velocities", [config.v_x, config.w_z])
+    # print("Robot's current velocities", [config.v_x, config.w_z])
     traj = calc_trajectory(xinit, config.min_u[0], config.min_u[1], config)
+    to_goal_cost = config.to_goal_cost_gain * calc_to_goal_cost(traj, config)
+
+    print("min_u = %.2f %.2f"% (config.min_u[0], config.min_u[1]), "Goal cost = %.2f"% to_goal_cost, "min cost = %.2f"% min_cost)
     config.costmap_rgb = draw_traj(config, traj, green)
 
     # Visualization
@@ -334,35 +402,9 @@ def calc_final_input(x, u, dw, config, ob):
     resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
     
     cv2.imshow('costmap_wrt_robot', resized)
+    # cv2.imshow('costmap_baselink', config.costmap_baselink)
     cv2.waitKey(3)
     return config.min_u
-
-
-def draw_traj(config, traj, color):
-    traj_array = np.asarray(traj)
-    x_odom_list = np.asarray(traj_array[:, 0])
-    y_odom_list = np.asarray(traj_array[:, 1])
-
-    # print(x_odom_list.shape)
-
-    x_rob_list, y_rob_list = odom_to_robot(config, x_odom_list, y_odom_list)
-    cm_col_list, cm_row_list = robot_to_costmap(config, x_rob_list, y_rob_list)
-
-    costmap_traj_pts = np.array((cm_col_list.astype(int), cm_row_list.astype(int))).T
-    # print(costmap_traj_pts) 
-
-    costmap_traj_pts = costmap_traj_pts.reshape((-1, 1, 2))
-
-    config.costmap_rgb = cv2.polylines(config.costmap_rgb, [costmap_traj_pts], False, color, 1)
-
-
-    # print([cm_col_list.astype(int), cm_row_list.astype(int)])
-    # for i in range(cm_row_list.shape[0]):
-    #     config.costmap_rgb[cm_row_list.astype(int)[i], cm_col_list.astype(int)[i]] = color
-
-    
-
-    return config.costmap_rgb
     
 
 
@@ -416,25 +458,63 @@ def calc_to_goal_cost(traj, config):
 
 
 def calc_social_cost(traj, config):
+    # print("Trajectory end-points wrt odom", traj[-1, 0], traj[-1, 1])
 
     # Convert traj points to robot frame
-    x_end_odom = np.array([traj[-1, 0]])
-    y_end_odom = np.array([traj[-1, 1]])
+    x_end_odom = traj[-1, 0]
+    y_end_odom = traj[-1, 1]
 
-    x_end_rob, y_end_rob = odom_to_robot(config, x_end_odom, y_end_odom)
+    x_end_rob = (x_end_odom - config.x)*math.cos(config.th) + (y_end_odom - config.y)*math.sin(config.th)
+    y_end_rob = -(x_end_odom - config.x)*math.sin(config.th) + (y_end_odom - config.y)*math.cos(config.th)
+
+    # int() and floor() behave differently with -ve numbers. int() is symmetric. 
+    # cm_col = config.costmap_shape[0]/2 - math.floor(y_end_rob/config.costmap_resolution)
+    # cm_row = config.costmap_shape[1]/2 - math.floor(x_end_rob/config.costmap_resolution)
+    cm_col = config.costmap_shape[0]/2 - int(y_end_rob/config.costmap_resolution)
+    cm_row = config.costmap_shape[1]/2 - int(x_end_rob/config.costmap_resolution)
+
+
+    # !!! NOTE !!!: IN COSTMAP, VALUES SHOULD BE ACCESSED AS (ROW,COL). FOR VIZ, IT SHOULD BE (COL, ROW)! 
     
-    cm_col, cm_row = robot_to_costmap(config, x_end_rob, y_end_rob)
-
-    social_cost = config.costmap_baselink[int(cm_col), int(cm_row)]
+    # if (config.costmap_baselink[int(cm_row), int(cm_col)] < SOCIAL_COST):
+    #     print("Costmap coordinates of end-points: ", (int(cm_col), int(cm_row)))
+    #     config.costmap_rgb = cv2.circle(config.costmap_rgb, (int(cm_col), int(cm_row)), 1, (255, 255, 255), 1)
+    #     print("Value at end-point = ", config.costmap_baselink[int(cm_row), int(cm_col)])
 
     # print("Max and min of costmap: ", np.max(config.costmap_baselink), np.min(config.costmap_baselink))
-    # print("Social cost:", social_cost)
+
+    # TODO: This should be the modified costmap from the classification subscriber
+    social_cost = config.costmap_baselink[int(cm_row), int(cm_col)]
 
     return social_cost
 
 
+
+def draw_traj(config, traj, color):
+    traj_array = np.asarray(traj)
+    x_odom_list = np.asarray(traj_array[:, 0])
+    y_odom_list = np.asarray(traj_array[:, 1])
+
+    # print(x_odom_list.shape)
+
+    x_rob_list, y_rob_list = odom_to_robot(config, x_odom_list, y_odom_list)
+    cm_col_list, cm_row_list = robot_to_costmap(config, x_rob_list, y_rob_list)
+
+    costmap_traj_pts = np.array((cm_col_list.astype(int), cm_row_list.astype(int))).T
+    # print(costmap_traj_pts) 
+
+    costmap_traj_pts = costmap_traj_pts.reshape((-1, 1, 2))
+    config.costmap_rgb = cv2.polylines(config.costmap_rgb, [costmap_traj_pts], False, color, 1)
+    
+    return config.costmap_rgb
+
+
+
+
+# NOTE: x_odom and y_odom are numpy arrays
 def odom_to_robot(config, x_odom, y_odom):
     
+    print(x_odom.shape[0])
     x_rob_odom_list = np.asarray([config.x for i in range(x_odom.shape[0])])
     y_rob_odom_list = np.asarray([config.y for i in range(y_odom.shape[0])])
 
@@ -483,13 +563,54 @@ def is_robot_stuck(config):
 
     # Condition for robot being stuck
     # NOTE: This condition may need to be changed to change in position or orientation
-    print("Robot's stuck locations: ", config.stuck_locations)
-    if (config.min_u != [0, 0] and (abs(config.v_x) <= 0.05 and abs(config.w_z) <= 0.05)):
-        print("Robot could be stuck!")
-        if ([math.floor(config.x), math.floor(config.y)] not in config.stuck_locations):
-            config.stuck_locations.append([math.floor(config.x), math.floor(config.y)])
+    
+    # print("Robot's stuck locations: ", config.stuck_locations)
+    # print("Robot's okay locations: ", config.okay_locations)
+    # print("DWA Action: ", config.min_u)
 
-        # Call recovery behaviors function
+    if ((config.min_u != [0, 0] and config.min_u != []) and (abs(config.v_x) <= 0.05 and abs(config.w_z) <= 0.05)):
+        print("Robot could be stuck!")
+        if ([math.floor(config.x), math.floor(config.y)] not in config.stuck_locations): 
+            # Stuck locations will only have integer coordinates. The "resolution" of the list is 1 meter.
+            # Store stuck location
+            config.stuck_locations.append([math.floor(config.x), math.floor(config.y)]) 
+
+        return True
+    
+    else:
+        if ([math.floor(config.x), math.floor(config.y)] not in config.okay_locations): 
+            # Okay locations will only have integer coordinates. The "resolution" of the list is 1 meter.
+            # Store stuck location
+            config.okay_locations.append([math.floor(config.x), math.floor(config.y)])
+        return False
+
+        
+
+def recover(config, speed):
+
+    x_odom = config.okay_locations[-1][0]
+    y_odom = config.okay_locations[-1][1]
+
+    # Convert the goal locations wrt robot frame. The error will simply be the goals.
+    error_x = (x_odom - config.x)*math.cos(config.th) + (y_odom - config.y)*math.sin(config.th)
+    error_y = -(x_odom - config.x)*math.sin(config.th) + (y_odom - config.y)*math.cos(config.th)
+
+    print("Recovery --- RobX, RobY --- Errors ")
+    print(x_odom, y_odom, config.x, config.y, error_x, error_y)
+
+    # Proportional gain
+    k_p = 0.5
+    vel_x = k_p * error_x
+    vel_y = k_p * error_y
+
+    # Note: This velocity assignment is for Spot cos it can move laterally
+    # For a differential drive robot, use difference in angle and use it to compute w
+    speed.linear.x = vel_x
+    speed.linear.y = vel_y
+
+    print(vel_x, vel_y)
+
+    return speed
 
 
 
@@ -504,6 +625,9 @@ def main():
     subLaser = rospy.Subscriber("/scan", LaserScan, obs.assignObs, config)
     subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
     subCostmap = rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
+    # subVegClassification = rospy.Subscriber("/vegetation/classification", String, config.classification_callback)
+
+
     # pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
     pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
 
@@ -519,7 +643,7 @@ def main():
     # runs until terminated externally
     while not rospy.is_shutdown():
 
-        is_robot_stuck(config)
+        config.stuck_status = is_robot_stuck(config)
 
         # Initial
         if config.goalX == 0.0006 and config.goalY == 0.0006:
@@ -530,23 +654,26 @@ def main():
         
         # Pursuing but not reached the goal
         elif (atGoal(config,x) == False): 
+
+            if (config.stuck_status == True):
+                # Publish velocities accordingly
+                speed = recover(config, speed)
             
-            u = dwa_control(x, u, config, obs.obst)
+            else:
+                u = dwa_control(x, u, config, obs.obst)
 
-            x[0] = config.x
-            x[1] = config.y
-            x[2] = config.th
-            x[3] = u[0]
-            x[4] = u[1]
-            speed.linear.x = x[3]
-            speed.angular.z = x[4]
+                x[0] = config.x
+                x[1] = config.y
+                x[2] = config.th
+                x[3] = u[0]
+                x[4] = u[1]
+                speed.linear.x = x[3]
+                speed.angular.z = x[4]
 
-        # elif (recovery behaviors):
-            # Publish velocities accordingly
 
         # If at goal then stay there until new goal published
         else:
-            # print("Goal reached!")
+            print("Goal reached!")
             speed.linear.x = 0.0
             speed.angular.z = 0.0
             x = np.array([config.x, config.y, config.th, 0.0, 0.0])

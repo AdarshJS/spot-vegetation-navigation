@@ -36,8 +36,8 @@ class image_feature:
         self.subscriber = rospy.Subscriber("/camera/color/image_raw/compressed", CompressedImage, self.callback,  queue_size = 1)
         print("subscribed to /camera/image/compressed")
 
-        self.directory = '/media/asathyam/Media/spot-veg/dataset/umd6'
-        self.type = 'umd6'
+        self.directory = '/media/asathyam/Media/spot-veg/1_dataset/umd_multi_6'
+        self.type = 'umd_multi_6'
         os.chdir(self.directory)
         self.iter = 0
 
@@ -74,6 +74,8 @@ class image_feature:
         
         cv2.imshow('cv_img', resized)
         cv2.waitKey(3)
+
+        # time.sleep(0.5)
 
         #### Create CompressedIamge ####
         # msg = CompressedImage()

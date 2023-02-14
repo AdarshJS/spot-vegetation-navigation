@@ -18,10 +18,10 @@ def load_images_from_folder(folder):
         crop_3 = img[int(height/2)+1:height, 0:int(width/2)]
         crop_4 = img[int(height/2)+1:height, int(width/2)+1:width]
 
-        folder_1 = "/media/asathyam/Media/spot-veg/dataset_lite/1_top_left"
-        folder_2 = "/media/asathyam/Media/spot-veg/dataset_lite/2_top_right"
-        folder_3 = "/media/asathyam/Media/spot-veg/dataset_lite/3_bottom_left"
-        folder_4 = "/media/asathyam/Media/spot-veg/dataset_lite/4_bottom_right"
+        folder_1 = "/media/asathyam/Media/spot-veg/4_dataset_cropped/1_top_left"
+        folder_2 = "/media/asathyam/Media/spot-veg/4_dataset_cropped/2_top_right"
+        folder_3 = "/media/asathyam/Media/spot-veg/4_dataset_cropped/3_bottom_left"
+        folder_4 = "/media/asathyam/Media/spot-veg/4_dataset_cropped/4_bottom_right"
         
         crop_1_name = folder_1 + "/" + filename + "_1.png"
         crop_2_name = folder_2 + "/" + filename + "_2.png"
@@ -48,7 +48,8 @@ if __name__ == "__main__":
     # folder = "/media/asathyam/Media/spot-veg/dataset_lite/bushes-lite"
     # folder = "/media/asathyam/Media/spot-veg/dataset_lite/grass-dense-lite"
     # folder = "/media/asathyam/Media/spot-veg/dataset_lite/grass-sparse-lite"
-    folder = "/media/asathyam/Media/spot-veg/dataset_lite/trees-lite"
+    # folder = "/media/asathyam/Media/spot-veg/dataset_lite/trees-lite"
+    folder = "/media/asathyam/Media/spot-veg/3_dataset_lite/umd_multi_6_lite"
     load_images_from_folder(folder)
 
     cv2.destroyAllWindows()

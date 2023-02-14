@@ -4,13 +4,13 @@ import math
 import random
 
 if __name__ == "__main__":
-	train_folder = "/media/asathyam/Media/spot-veg/5_dataset_final/grass_sparse_train"
-	test_folder = "/media/asathyam/Media/spot-veg/5_dataset_final/grass_sparse_test"
+	train_folder = "/media/asathyam/Media/spot-veg/5_dataset_final/train/bushes_train"
+	test_folder = "/media/asathyam/Media/spot-veg/5_dataset_final/test/bushes_test"
 
 	test_percentage = 0.25
 
 	num_images = len([name for name in os.listdir(train_folder)])
-	num_test_images = math.floor(test_percentage * num_images)
+	num_test_images = int(math.floor(test_percentage * num_images))
 	print("Number of images: ", num_test_images)
 
 	for i in range(num_test_images):

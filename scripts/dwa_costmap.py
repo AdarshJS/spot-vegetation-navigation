@@ -32,9 +32,9 @@ from PIL import Image
 
 import sys
 # OpenCV
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.remove('/opt/ros/noetic/lib/python2.7/dist-packages')
 import cv2
-sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.append('/opt/ros/noetic/lib/python2.7/dist-packages')
 
 
 class Config():
@@ -168,20 +168,23 @@ class Config():
 
         yaw_deg = self.th*180/math.pi
 
-        # print("Yaw angle = ", yaw_deg)
+        print("Yaw angle = ", yaw_deg)
 
         cm_baselink_pil = cm_image.rotate(-yaw_deg)
         self.costmap_baselink = np.array(cm_baselink_pil)
         self.costmap_rgb = cv2.cvtColor(self.costmap_baselink,cv2.COLOR_GRAY2RGB)
 
+        rob_x = int(self.costmap_rgb.shape[0]/2)
+        rob_y = int(self.costmap_rgb.shape[1]/2)
+
         
         # # Visualization
-        dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), \
-         int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
-        resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 5, (255, 0, 0), 2)
+        # dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
+        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
         
-        cv2.imshow('costmap_wrt_robot', resized)
-        cv2.waitKey(3)
+        # cv2.imshow('costmap_wrt_robot', resized)
+        # cv2.waitKey(3)
 
 
 
@@ -402,8 +405,9 @@ def calc_final_input(x, u, dw, config, ob):
     resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
     
     cv2.imshow('costmap_wrt_robot', resized)
-    # cv2.imshow('costmap_baselink', config.costmap_baselink)
+    cv2.imshow('costmap_baselink', config.costmap_baselink)
     cv2.waitKey(3)
+    
     return config.min_u
     
 
@@ -514,7 +518,7 @@ def draw_traj(config, traj, color):
 # NOTE: x_odom and y_odom are numpy arrays
 def odom_to_robot(config, x_odom, y_odom):
     
-    print(x_odom.shape[0])
+    # print(x_odom.shape[0])
     x_rob_odom_list = np.asarray([config.x for i in range(x_odom.shape[0])])
     y_rob_odom_list = np.asarray([config.y for i in range(y_odom.shape[0])])
 
@@ -621,15 +625,15 @@ def main():
     config = Config()
     obs = Obstacles()
 
-    subOdom = rospy.Subscriber("/odometry/filtered", Odometry, config.assignOdomCoords)
+    subOdom = rospy.Subscriber("/spot/odometry", Odometry, config.assignOdomCoords)
     subLaser = rospy.Subscriber("/scan", LaserScan, obs.assignObs, config)
     subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
-    subCostmap = rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
+    subCostmap = rospy.Subscriber("/mid/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
     # subVegClassification = rospy.Subscriber("/vegetation/classification", String, config.classification_callback)
 
 
-    # pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-    pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
+    pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+    # pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
 
     speed = Twist()
     
@@ -643,7 +647,8 @@ def main():
     # runs until terminated externally
     while not rospy.is_shutdown():
 
-        config.stuck_status = is_robot_stuck(config)
+        # config.stuck_status = is_robot_stuck(config)
+        config.stuck_status = False
 
         # Initial
         if config.goalX == 0.0006 and config.goalY == 0.0006:

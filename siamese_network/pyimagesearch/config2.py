@@ -2,10 +2,9 @@
 import os
 
 # specify the shape of the inputs for our network
-# IMG_SHAPE = (28, 28, 1)
 # IMG_SHAPE = (180, 320, 3) # (height, width, channels)
-# IMG_SHAPE = (90, 160, 3) # (height, width, channels)
-IMG_SHAPE = (135, 240, 3) # (height, width, channels)
+IMG_SHAPE = (90, 160, 3) # (height, width, channels)
+# IMG_SHAPE = (135, 240, 3) # (height, width, channels)
 
 # specify the batch size and number of epochs
 BATCH_SIZE = 64

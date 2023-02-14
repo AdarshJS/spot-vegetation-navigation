@@ -38,20 +38,33 @@ MobileNetV3_Small_Feature = [
     [ "ConvBnAct",  3,   False, 16,    False, "hswish", 2 ],
     [ "bneck",      3,   16,    16,    True,  "relu",   2 ],
     [ "bneck",      3,   72,    24,    False, "relu",   2 ],
-    [ "bneck",      3,   88,    24,    False, "relu",   1 ],
-    [ "bneck",      5,   96,    40,    True,  "hswish", 2 ],
-    [ "bneck",      5,   240,   40,    True,  "hswish", 1 ],
-    [ "bneck",      5,   240,   40,    True,  "hswish", 1 ],
-    [ "bneck",      5,   120,   48,    True,  "hswish", 1 ],
-    [ "bneck",      5,   144,   48,    True,  "hswish", 1 ],
-    [ "bneck",      5,   288,   96,    True,  "hswish", 2 ],
-    [ "bneck",      5,   576,   96,    True,  "hswish", 1 ],
-    [ "bneck",      5,   576,   96,    True,  "hswish", 1 ],
-    [ "ConvBnAct",  1,   False, 576,   True,  "hswish", 1 ],
+    [ "bneck",      5,   88,    24,    False, "relu",   1 ],
+    [ "ConvBnAct",  1,   False, 88,   True,  "hswish", 1 ],
     [ "pool",       7,   False, False, False, "None",   1 ],
     [ "ConvNBnAct", 1,   False, 1280,  False, "hswish", 1 ],
     [ "ConvNBnAct", 1,   False, 1000,  False, "None",   1 ],
 ]
+
+
+# MobileNetV3_Small_Feature = [
+#     # Op            k    exp    out    SE     NL        s
+#     [ "ConvBnAct",  3,   False, 16,    False, "hswish", 2 ],
+#     [ "bneck",      3,   16,    16,    True,  "relu",   2 ],
+#     [ "bneck",      3,   72,    24,    False, "relu",   2 ],
+#     [ "bneck",      3,   88,    24,    False, "relu",   1 ],
+#     [ "bneck",      5,   96,    40,    True,  "hswish", 2 ],
+#     [ "bneck",      5,   240,   40,    True,  "hswish", 1 ],
+#     [ "bneck",      5,   240,   40,    True,  "hswish", 1 ],
+#     [ "bneck",      5,   120,   48,    True,  "hswish", 1 ],
+#     [ "bneck",      5,   144,   48,    True,  "hswish", 1 ],
+#     [ "bneck",      5,   288,   96,    True,  "hswish", 2 ],
+#     [ "bneck",      5,   576,   96,    True,  "hswish", 1 ],
+#     [ "bneck",      5,   576,   96,    True,  "hswish", 1 ],
+#     [ "ConvBnAct",  1,   False, 576,   True,  "hswish", 1 ],
+#     [ "pool",       7,   False, False, False, "None",   1 ],
+#     [ "ConvNBnAct", 1,   False, 1280,  False, "hswish", 1 ],
+#     [ "ConvNBnAct", 1,   False, 1000,  False, "None",   1 ],
+# ]
 
 MobileNetV3_Large_Spec = [
     # Op            k    exp    out    SE     NL        s
@@ -366,7 +379,8 @@ def MobileNetV3(type="large", input_shape=(224, 224, 3), classes_number=1000, wi
         if (type == "small" and i == 14) or (type == "feature" and i == 14) or (type == "large" and i == 18):
             output = CusDropout(dropout_rate=dropout_rate)(output)
 
-    outputs = CusReshape(out=classes_number)(output)
+    # from IPython import embed;embed()
+    outputs = CusReshape(out=classes_number * output.shape[1] * output.shape[2])(output)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs, name=name)
 
@@ -390,7 +404,7 @@ if __name__ == "__main__":
 
     # embeddingDim = 500
 
-    # model = MobileNetV3(type="feature", input_shape=(224, 224, 3), classes_number=embeddingDim)
+    # model = MobileNetV3(type="feature", input_shape=(240, 135, 3), classes_number=embeddingDim)
 
     # model.summary()
 

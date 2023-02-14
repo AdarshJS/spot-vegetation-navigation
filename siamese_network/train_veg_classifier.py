@@ -19,8 +19,10 @@ import time
 
 numClasses = 4 # grass-dense, grass-sparse, trees, bushes
 
+hidden_dim = 1000
+
 # NOTE: (width, height) format only for reshaping PIL images in make_pairs(). If values change, also change in config2.py 
-image_dims = (240, 135) #(160, 90) # (320, 180)
+image_dims = (160, 90) #(240, 135) # # (320, 180)
 
 # NOTE: UNCOMMENT IF NEW TRAINING AND TESTING PAIRS ARE NEEDED
 
@@ -56,7 +58,7 @@ image_dims = (240, 135) #(160, 90) # (320, 180)
 # np.save('pairTest.npy', pairTest)
 # np.save('labelTest.npy', labelTest)
 
-npy_folder = "med_dataset"
+npy_folder = "small_dataset"
 # Load training data
 print("[INFO]: Loading data!")
 pairTrain = np.load(npy_folder + "/pairTrain.npy")
@@ -76,7 +78,7 @@ imgA = Input(shape=config.IMG_SHAPE)
 imgB = Input(shape=config.IMG_SHAPE)
 
 # Check the type of this
-featureExtractor = mobilenetv3.MobileNetV3(type="feature", input_shape=config.IMG_SHAPE, classes_number=numClasses)
+featureExtractor = mobilenetv3.MobileNetV3(type="feature", input_shape=config.IMG_SHAPE, classes_number=hidden_dim)
 # featureExtractor = build_siamese_model(config.IMG_SHAPE)
 featsA = featureExtractor(imgA)
 featsB = featureExtractor(imgB) # this featsB for all classes can be saved so that it need not be computed again
@@ -100,9 +102,9 @@ history = model.fit(
 	epochs=config.EPOCHS)
 
 # # serialize the model to disk
-# print("[INFO] saving siamese model...")
-# model.save(config.MODEL_PATH)
+print("[INFO] saving siamese model...")
+model.save(config.MODEL_PATH)
 
-# # plot the training history
-# print("[INFO] plotting training history...")
-# utils.plot_training(history, config.PLOT_PATH)
+# plot the training history
+print("[INFO] plotting training history...")
+utils.plot_training(history, config.PLOT_PATH)

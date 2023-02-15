@@ -67,14 +67,14 @@ class Config():
         # self.th = 0.0
         # self.r = rospy.Rate(20)
 
-        self.max_speed = 0.5  # [m/s]
+        self.max_speed = 0.6  # [m/s]
         self.min_speed = 0.05  # [m/s]
         self.max_yawrate = 0.6  # [rad/s]
         self.max_accel = 1  # [m/ss]
         self.max_dyawrate = 3.2  # [rad/ss]
         
-        self.v_reso = 0.30 #0.15  # [m/s]
-        self.yawrate_reso = 0.15 #0.05  # [rad/s]
+        self.v_reso = 0.20  # [m/s]
+        self.yawrate_reso = 0.10 #0.05  # [rad/s]
         
         self.dt = 0.5  # [s]
         self.predict_time = 3.0 #1.5  # [s]
@@ -83,7 +83,7 @@ class Config():
         self.speed_cost_gain = 10   # 0.1   # lower = faster
         self.obs_cost_gain = 3.2     # lower z= fearless
         
-        self.robot_radius = 0.3  # [m]
+        self.robot_radius = 0.6  # [m]
         self.x = 0.0
         self.y = 0.0
         self.v_x = 0.0
@@ -179,9 +179,11 @@ class Config():
 
         
         # # Visualization
+        # Mark the robot on costmap 
         self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 5, (255, 0, 0), 2)
-        # dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
-        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        
+        dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
+        resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
         
         # cv2.imshow('costmap_wrt_robot', resized)
         # cv2.waitKey(3)
@@ -405,7 +407,7 @@ def calc_final_input(x, u, dw, config, ob):
     resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
     
     cv2.imshow('costmap_wrt_robot', resized)
-    cv2.imshow('costmap_baselink', config.costmap_baselink)
+    # cv2.imshow('costmap_baselink', config.costmap_baselink)
     cv2.waitKey(3)
     
     return config.min_u
@@ -628,7 +630,7 @@ def main():
     subOdom = rospy.Subscriber("/spot/odometry", Odometry, config.assignOdomCoords)
     subLaser = rospy.Subscriber("/scan", LaserScan, obs.assignObs, config)
     subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
-    subCostmap = rospy.Subscriber("/mid/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
+    subCostmap = rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
     # subVegClassification = rospy.Subscriber("/vegetation/classification", String, config.classification_callback)
 
 

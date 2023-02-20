@@ -11,9 +11,9 @@ import random
 
 import sys
 # OpenCV
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
-import cv2
-sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# import cv2
+# sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
 
 from PIL import Image
 
@@ -89,18 +89,32 @@ def euclidean_distance(vectors):
 
 def plot_training(H, plotPath):
 	# construct a plot that plots and saves the training history
+	
 	plt.style.use("ggplot")
 	plt.figure()
 	plt.plot(H.history["loss"], label="train_loss")
 	plt.plot(H.history["val_loss"], label="val_loss")
-	plt.plot(H.history["accuracy"], label="train_acc")
-	plt.plot(H.history["val_accuracy"], label="val_acc")
+	# plt.plot(H.history["acc"], label="train_acc")
+	# plt.plot(H.history["val_acc"], label="val_acc")
 	plt.title("Training Loss and Accuracy")
 	plt.xlabel("Epoch #")
 	plt.ylabel("Loss/Accuracy")
 	plt.legend(loc="lower left")
 	plt.savefig(plotPath)
 
+def load_reference_imgs(reference_img_folder,image_name,image_dims):
+	# load reference images for the 4 vegetation classes. WIll be used as one of the inputs to the model.
+	# other image input is the real time camera feed
+	current_image_name = reference_img_folder
+	currentImage = Image.open(reference_img_folder + "/" + image_name+'.png')
+	currentImage = currentImage.resize(image_dims)
+	currentImage = np.array(currentImage)
+	currentImage = currentImage / 255.0 # Normalize between 0-1
+	return currentImage
+
+def make_ref_current_pairs(ref_imgs):
+	#create image pairs using the current image and the reference images from each class
+	pass
 
 # For test purposes
 # if __name__ == "__main__":

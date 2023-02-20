@@ -184,6 +184,7 @@ class Config():
         
         dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
         resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+
         
         # cv2.imshow('costmap_wrt_robot', resized)
         # cv2.waitKey(3)

@@ -15,7 +15,7 @@
 import rospy
 import math
 import numpy as np
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray
 from geometry_msgs.msg import Twist, PointStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
@@ -32,9 +32,9 @@ from PIL import Image
 
 import sys
 # OpenCV
-# sys.path.remove('/opt/ros/noetic/lib/python2.7/dist-packages')
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
-# sys.path.append('/opt/ros/noetic/lib/python2.7/dist-packages')
+sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
 
 
 class Config():
@@ -108,8 +108,13 @@ class Config():
         self.costmap_shape = (200, 200)
         self.costmap_resolution = 0.05
         print("Initialized Costmap!")
-        self.costmap_baselink = np.zeros(self.costmap_shape, dtype=np.uint8)
-        self.costmap_rgb = cv2.cvtColor(self.costmap_baselink,cv2.COLOR_GRAY2RGB)
+        self.costmap_baselink_high = np.zeros(self.costmap_shape, dtype=np.uint8)
+        self.costmap_baselink_mid = np.zeros(self.costmap_shape, dtype=np.uint8)
+        self.costmap_baselink_low = np.zeros(self.costmap_shape, dtype=np.uint8)
+        self.costmap_rgb = cv2.cvtColor(self.costmap_baselink_low,cv2.COLOR_GRAY2RGB)
+        self.obs_low_mid_high = np.argwhere(self.costmap_baselink_low > 150) # should be null set
+
+        self.alpha = 0.35
 
 
     # Callback for Odometry
@@ -156,9 +161,46 @@ class Config():
 
 
     # Callback for local costmap from move_base and converting it wrt robot frame
-    def costmap_callback(self, data):
+    def high_costmap_callback(self, data):
 
-        print("Received local costmap!")
+        print("Received high local costmap!")
+
+        costmap_2d = np.reshape(data.data, (-1, int(math.sqrt(len(data.data)))))
+        costmap_2d = np.reshape(data.data, (int(math.sqrt(len(data.data))), -1))
+        costmap_2d = np.rot90(np.fliplr(costmap_2d), 1, (1, 0))
+
+        cm_image = Image.fromarray(np.uint8(costmap_2d))
+
+        yaw_deg = self.th*180/math.pi
+
+        # print("Yaw angle = ", yaw_deg)
+
+        cm_baselink_pil = cm_image.rotate(-yaw_deg)
+        self.costmap_baselink_high = np.array(cm_baselink_pil)
+
+
+    def mid_costmap_callback(self, data):
+
+        print("Received mid local costmap!")
+
+        costmap_2d = np.reshape(data.data, (-1, int(math.sqrt(len(data.data)))))
+        costmap_2d = np.reshape(data.data, (int(math.sqrt(len(data.data))), -1))
+        costmap_2d = np.rot90(np.fliplr(costmap_2d), 1, (1, 0))
+
+        cm_image = Image.fromarray(np.uint8(costmap_2d))
+
+        yaw_deg = self.th*180/math.pi
+
+        # print("Yaw angle = ", yaw_deg)
+
+        cm_baselink_pil = cm_image.rotate(-yaw_deg)
+        self.costmap_baselink_mid = np.array(cm_baselink_pil)
+
+
+
+    def low_costmap_callback(self, data):
+
+        print("Received low local costmap!")
 
         costmap_2d = np.reshape(data.data, (-1, int(math.sqrt(len(data.data)))))
         costmap_2d = np.reshape(data.data, (int(math.sqrt(len(data.data))), -1))
@@ -171,24 +213,60 @@ class Config():
         print("Yaw angle = ", yaw_deg)
 
         cm_baselink_pil = cm_image.rotate(-yaw_deg)
-        self.costmap_baselink = np.array(cm_baselink_pil)
-        self.costmap_rgb = cv2.cvtColor(self.costmap_baselink,cv2.COLOR_GRAY2RGB)
+        self.costmap_baselink_low = np.array(cm_baselink_pil)
+        self.costmap_rgb = cv2.cvtColor(self.costmap_baselink_low, cv2.COLOR_GRAY2RGB)
 
+        # Robot location on costmap
         rob_x = int(self.costmap_rgb.shape[0]/2)
         rob_y = int(self.costmap_rgb.shape[1]/2)
 
-        
-        # # Visualization
-        # Mark the robot on costmap 
-        self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 5, (255, 0, 0), 2)
-        
-        dim = (int(self.costmap_baselink.shape[1] * self.scale_percent / 100), int(self.costmap_baselink.shape[0] * self.scale_percent / 100)) 
-        resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
 
+        # Visualization
+        # Mark the robot on costmap 
+        self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 3, (255, 0, 0), -1)
+        self.costmap_sum()
         
+        # dim = (int(self.costmap_baselink_low.shape[1] * self.scale_percent / 100), int(self.costmap_baselink_low.shape[0] * self.scale_percent / 100)) 
+        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+
         # cv2.imshow('costmap_wrt_robot', resized)
         # cv2.waitKey(3)
 
+
+    def costmap_sum(self):
+        
+        costmap_sum = self.costmap_baselink_low + self.costmap_baselink_mid + self.costmap_baselink_high
+        
+        self.obs_low_mid_high = np.argwhere(costmap_sum > 150) # (returns row, col)
+
+        # Mark the robot
+        # costmap_sum_rgb = cv2.cvtColor(costmap_sum, cv2.COLOR_GRAY2RGB)
+        # rob_x = int(costmap_sum_rgb.shape[0]/2)
+        # rob_y = int(costmap_sum_rgb.shape[1]/2) 
+        # costmap_sum_rgb = cv2.circle(costmap_sum_rgb, (rob_x, rob_y), 3, (255, 0, 0), 2) # center is (col, row)
+
+
+        if(self.obs_low_mid_high.shape[0] != 0):
+            self.costmap_rgb = self.tall_obstacle_marker(self.costmap_rgb, self.obs_low_mid_high)
+        else:
+            # final = self.costmap_rgb
+            pass
+
+        # dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
+        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        
+        # cv2.imshow('costmap_sum', resized)
+        # cv2.waitKey(3)
+
+
+    def tall_obstacle_marker(self, rgb_image, centers):
+
+        # Marking centers red
+        rgb_image[centers[:, 0], centers[:, 1], 0] = 0
+        rgb_image[centers[:, 0], centers[:, 1], 1] = 0
+        rgb_image[centers[:, 0], centers[:, 1], 2] = 255
+
+        return rgb_image
 
 
     def classification_callback(self, data):
@@ -196,32 +274,94 @@ class Config():
         print("Received classification results!")
 
         # Define grid cells belonging to each quadrant of the image
-        # top_left = []
-        # top_right = []
-        # bottom_left = []
-        # bottom_right = []
+        # (col, row) convention
+        top_left = [(84, 0), (100, 49)]
+        top_right = [(100, 0), (117, 49)]
+        bottom_left = [(84, 49), (100, 82)]
+        bottom_right = [(100, 49), (117, 82)]
+
+        Q1 = np.array([(col, row) for col in range(84, 100+1) for row in range(0, 49+1)])
+        Q2 = np.array([(col, row) for col in range(100, 117+1) for row in range(0, 49+1)])
+        Q3 = np.array([(col, row) for col in range(84, 100+1) for row in range(49, 82+1)])
+        Q4 = np.array([(col, row) for col in range(100, 117+1) for row in range(49, 82+1)])
+
+        # Sanity check for modifying costmap for navigation. THIS IS THE CORRECT CONVENTION.
+        # Note: (row, col) convention is used for np array
+        # self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = 200
+        # self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = 255
+        # self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = 255
+        # self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = 200
+        # cv2.imshow("Modified Costmap", self.costmap_baselink_low)
+        # cv2.waitKey(3)
+
+        # Sanity check for modifying costmap for visualization. THIS IS THE CORRECT CONVENTION.
+        # cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1) 
+        # cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1) 
+        # cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(255,0,0), thickness= 1) 
+        # cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(255,0,0), thickness= 1) 
+        # dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
+        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        # cv2.imshow('costmap', resized)
+        # cv2.waitKey(3)
+
 
         # Clear Costmap
         # NOTE: Modify this based on the actual data being published
-        if (data[0] == "grass"):
-            self.costmap_baselink[top_left[:, 0], top_left[:, 1]] = 0  # instead of zero, maybe add a non-zero, weighted (based on confusion matrix) cost
-        else:
-            pass
+        # 0 - non-pliable, 1 - pliable
+        # Even indices correspond to class number, Odd indices correspond to distance
+        veg1 = data[0]
+        veg2 = data[2]
+        veg3 = data[4]
+        veg4 = data[6]
+        conf1 = math.exp(-self.alpha * data[1])
+        conf2 = math.exp(-self.alpha * data[3])
+        conf3 = math.exp(-self.alpha * data[5])
+        conf4 = math.exp(-self.alpha * data[7])
 
-        if (data[1] == "grass"):
-            self.costmap_baselink[top_right[:, 0], top_right[:, 1]] = 0
-        else:
-            pass
+        # Quadrant 1
+        # TODO: Check for tall obstacles
+        if (veg1 == 1):
+            # Clear cost map
+            self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = int(self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1)
 
-        if (data[2] == "grass"):
-            self.costmap_baselink[bottom_left[:, 0], bottom_left[:, 1]] = 0
         else:
-            pass
+            # Don't clear costmap
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(255,0,0), thickness= 1)
 
-        if (data[3] == "grass"):
-            self.costmap_baselink[bottom_right[:, 0], bottom_right[:, 1]] = 0
+
+        # Quadrant 2
+        if (veg2 == 1):
+            # Clear cost map
+            self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = int(self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1)
         else:
-            pass
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(255,0,0), thickness= 1)
+
+
+        # Quadrant 3
+        if (veg3 == 1):
+            # Clear cost map
+            self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = int(self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(0,255,0), thickness= 1)
+        else:
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(255,0,0), thickness= 1)
+
+
+        # Quadrant 4
+        if (veg4 == 1):
+            # Clear cost map
+            self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = int(self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(0,255,0), thickness= 1) 
+        else:
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(255,0,0), thickness= 1) 
+
+
+        cv2.imshow("Modified Costmap", self.costmap_baselink_low)
+        dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
+        resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        cv2.imshow('costmap', resized)
+        cv2.waitKey(3)
 
 
 
@@ -631,8 +771,14 @@ def main():
     subOdom = rospy.Subscriber("/spot/odometry", Odometry, config.assignOdomCoords)
     subLaser = rospy.Subscriber("/scan", LaserScan, obs.assignObs, config)
     subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
-    subCostmap = rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
-    # subVegClassification = rospy.Subscriber("/vegetation/classification", String, config.classification_callback)
+
+    # Costmap callbacks
+    rospy.Subscriber("/high/move_base/local_costmap/costmap", OccupancyGrid, config.high_costmap_callback)
+    rospy.Subscriber("/mid/move_base/local_costmap/costmap", OccupancyGrid, config.mid_costmap_callback)
+    rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.low_costmap_callback)
+    
+    # subCostmap = rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
+    # subVegClassification = rospy.Subscriber("/vegetation_classes", Float32MultiArray, config.classification_callback)
 
 
     pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)

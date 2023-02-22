@@ -32,9 +32,9 @@ from PIL import Image
 
 import sys
 # OpenCV
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
-sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
 
 
 class Config():
@@ -309,20 +309,21 @@ class Config():
         # NOTE: Modify this based on the actual data being published
         # 0 - non-pliable, 1 - pliable
         # Even indices correspond to class number, Odd indices correspond to distance
-        veg1 = data[0]
-        veg2 = data[2]
-        veg3 = data[4]
-        veg4 = data[6]
-        conf1 = math.exp(-self.alpha * data[1])
-        conf2 = math.exp(-self.alpha * data[3])
-        conf3 = math.exp(-self.alpha * data[5])
-        conf4 = math.exp(-self.alpha * data[7])
+        veg1 = data.data[0]
+        veg2 = data.data[2]
+        veg3 = data.data[4]
+        veg4 = data.data[6]
+        conf1 = math.exp(-self.alpha * data.data[1])
+        conf2 = math.exp(-self.alpha * data.data[3])
+        conf3 = math.exp(-self.alpha * data.data[5])
+        conf4 = math.exp(-self.alpha * data.data[7])
 
         # Quadrant 1
         # TODO: Check for tall obstacles
         if (veg1 == 1):
             # Clear cost map
-            self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = int(self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
+            self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = (self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
+
             cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1)
 
         else:
@@ -333,7 +334,7 @@ class Config():
         # Quadrant 2
         if (veg2 == 1):
             # Clear cost map
-            self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = int(self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
+            self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = (self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
             cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1)
         else:
             cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(255,0,0), thickness= 1)
@@ -342,7 +343,7 @@ class Config():
         # Quadrant 3
         if (veg3 == 1):
             # Clear cost map
-            self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = int(self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
+            self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = (self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
             cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(0,255,0), thickness= 1)
         else:
             cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(255,0,0), thickness= 1)
@@ -351,11 +352,12 @@ class Config():
         # Quadrant 4
         if (veg4 == 1):
             # Clear cost map
-            self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = int(self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
+            self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = (self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
             cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(0,255,0), thickness= 1) 
         else:
             cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(255,0,0), thickness= 1) 
 
+        self.costmap_baselink_low = self.costmap_baselink_low.astype('uint8')
 
         cv2.imshow("Modified Costmap", self.costmap_baselink_low)
         dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
@@ -778,7 +780,7 @@ def main():
     rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.low_costmap_callback)
     
     # subCostmap = rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
-    # subVegClassification = rospy.Subscriber("/vegetation_classes", Float32MultiArray, config.classification_callback)
+    subVegClassification = rospy.Subscriber("/vegetation_classes", Float32MultiArray, config.classification_callback)
 
 
     pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)

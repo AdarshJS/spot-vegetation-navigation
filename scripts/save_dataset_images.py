@@ -36,8 +36,8 @@ class image_feature:
         self.subscriber = rospy.Subscriber("/camera/color/image_raw/compressed", CompressedImage, self.callback,  queue_size = 1)
         print("subscribed to /camera/image/compressed")
 
-        self.directory = '/media/asathyam/Media/spot-veg/1_dataset/umd_multi_6'
-        self.type = 'umd_multi_6'
+        self.directory = '/home/spotcore/catkin_ws/src/spot-vegetation-navigation/dataset'
+        self.type = 'mar26_umd'
         os.chdir(self.directory)
         self.iter = 0
 

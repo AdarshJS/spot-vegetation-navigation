@@ -40,7 +40,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCL
         <rosparam>
             target_frame: velodyne # camera_link # Leave disabled to output scan in pointcloud frame
             transform_tolerance: 0.01
-            min_height: 0.1
+            min_height: 0.4 
             max_height: 0.75
 
             angle_min: -3.1415 #-1.5708 # -M_PI/2
@@ -68,7 +68,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCL
         <rosparam>
             target_frame: velodyne # camera_link # Leave disabled to output scan in pointcloud frame
             transform_tolerance: 0.01
-            min_height: -0.75
+            min_height: -0.3
             max_height: 0.0
 
             angle_min: -3.1415 #-1.5708 # -M_PI/2
@@ -102,11 +102,11 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCL
     <rosparam file="$(find husky_navigation)/config/planner.yaml" command="load"/>
 
     <!-- observation sources located in costmap_common.yaml -->
-    <rosparam file="/home/spotcore/multiview_costmap/costmap_common_high.yaml" command="load" ns="global_costmap" />
-    <rosparam file="/home/spotcore/multiview_costmap/costmap_common_high.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_common_high.yaml" command="load" ns="global_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_common_high.yaml" command="load" ns="local_costmap" />
 
     <!-- local costmap, needs size -->
-    <rosparam file="$(find husky_navigation)/config/costmap_local.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_local.yaml" command="load" ns="local_costmap" />
     <param name="local_costmap/width" value="10.0"/>
     <param name="local_costmap/height" value="10.0"/>
 
@@ -127,11 +127,11 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCL
     <rosparam file="$(find husky_navigation)/config/planner.yaml" command="load"/>
 
     <!-- observation sources located in costmap_common.yaml -->
-    <rosparam file="/home/spotcore/multiview_costmap/costmap_common_mid.yaml" command="load" ns="global_costmap" />
-    <rosparam file="/home/spotcore/multiview_costmap/costmap_common_mid.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_common_mid.yaml" command="load" ns="global_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_common_mid.yaml" command="load" ns="local_costmap" />
 
     <!-- local costmap, needs size -->
-    <rosparam file="$(find husky_navigation)/config/costmap_local.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_local.yaml" command="load" ns="local_costmap" />
     <param name="local_costmap/width" value="10.0"/>
     <param name="local_costmap/height" value="10.0"/>
 
@@ -152,11 +152,11 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCL
     <rosparam file="$(find husky_navigation)/config/planner.yaml" command="load"/>
 
     <!-- observation sources located in costmap_common.yaml -->
-    <rosparam file="/home/spotcore/multiview_costmap/costmap_common_low.yaml" command="load" ns="global_costmap" />
-    <rosparam file="/home/spotcore/multiview_costmap/costmap_common_low.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_common_low.yaml" command="load" ns="global_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_common_low.yaml" command="load" ns="local_costmap" />
 
     <!-- local costmap, needs size -->
-    <rosparam file="$(find husky_navigation)/config/costmap_local.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/costmap_local.yaml" command="load" ns="local_costmap" />
     <param name="local_costmap/width" value="10.0"/>
     <param name="local_costmap/height" value="10.0"/>
 

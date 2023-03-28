@@ -39,6 +39,9 @@ class Data_Subscriber:
 		self.odom_topic_name = "/spot/odometry"  
 		self.classifier_topic_name = '/vegetation_classes'
 
+		choice = input("Batch Length 8 or 16 ?")
+		self.batch_length = int(choice)
+
 		# Topic names
 		self.image_sub = rospy.Subscriber(self.img_topic_name, CompressedImage, self.img_callback, queue_size=1,buff_size=2**25)
 		self.classifier_pub = rospy.Publisher(self.classifier_topic_name, Float32MultiArray,queue_size=10)
@@ -51,11 +54,14 @@ class Data_Subscriber:
 		reference_img_folder = './reference_imgs'
 		self.classifier_msg = Float32MultiArray()
 
-		self.ref_1 = utils.load_reference_imgs(reference_img_folder,'bushes_1',self.image_dims)
-		self.ref_2 = utils.load_reference_imgs(reference_img_folder,'grass_dense_1',self.image_dims)
-		self.ref_3 = utils.load_reference_imgs(reference_img_folder,'grass_sparse_1',self.image_dims)
-		self.ref_4 = utils.load_reference_imgs(reference_img_folder,'trees_1',self.image_dims)
+		self.ref_1 = utils.load_reference_imgs(reference_img_folder,'bushes_2',self.image_dims)[:,:,:3]
+		self.ref_2 = utils.load_reference_imgs(reference_img_folder,'grass_dense_1',self.image_dims)[:,:,:3]
+		self.ref_3 = utils.load_reference_imgs(reference_img_folder,'grass_sparse_1',self.image_dims)[:,:,:3]
+		self.ref_4 = utils.load_reference_imgs(reference_img_folder,'trees_4',self.image_dims)[:,:,:3]
 		self.ref_5 = utils.load_reference_imgs(reference_img_folder,'dried_grass1',self.image_dims)[:,:,:3]
+
+		self.ref_6 = utils.load_reference_imgs(reference_img_folder,'trees_3_quad',self.image_dims)[:,:,:3]
+		self.ref_7 = utils.load_reference_imgs(reference_img_folder,'trees_4_quad',self.image_dims)[:,:,:3]
 # 
 		# self.ref_img =self.ref_5[:,:,:3]
 		# print('Ref Image dims:', self.ref_img.shape)
@@ -64,6 +70,7 @@ class Data_Subscriber:
 		print(".... loading siamese model...")
 		print(config.MODEL_PATH)
 		self.model = load_model(config.MODEL_PATH,custom_objects={'contrastive_loss': metrics.contrastive_loss},compile=False)
+		
 
 	def img_callback(self,img_data):
 		try:
@@ -80,7 +87,7 @@ class Data_Subscriber:
 		print("Sequence No: ",img_data.header.seq)
 		(self.rows,self.cols,channels) = cv_image.shape
 		(height, width, _) = cv_image.shape
-		print(" camera img (rows,cols,channels)",self.rows,self.cols,channels)
+		# print(" camera img (rows,cols,channels)",self.rows,self.cols,channels)
 
 		# # current image is the entire image for now.TODO: split to 4 quadrants and pair separately
 		# currentImage = cv2.resize(cv_image, self.image_dims, interpolation = cv2.INTER_AREA) #cv_image.resize(self.image_dims)
@@ -107,26 +114,44 @@ class Data_Subscriber:
 		# print("printing predictions........")
 		# print(predictions)
 
-		pred1 = predictions[0:4]
-		pred2 = predictions[4:8]
-		pred3 = predictions[8:12]
-		pred4 = predictions[12:]
 
-		pred1_idx = np.where(pred1 == pred1.min())[0]
-		pred2_idx = np.where(pred2 == pred2.min())[0]
-		pred3_idx = np.where(pred3 == pred3.min())[0]
-		pred4_idx = np.where(pred4 == pred4.min())[0]
+		if self.batch_length == 8:
 
-		# print("indices:",pred1_idx,pred2_idx,pred3_idx,pred4_idx)
+			pred1 = predictions[0:2]
+			pred2 = predictions[2:4]
+			pred3 = predictions[4:6]
+			pred4 = predictions[6:]
 
-		quad_1,class_val_1 = self.category_selector(pred1,pred1_idx)
-		quad_2,class_val_2 = self.category_selector(pred2,pred2_idx)
-		quad_3,class_val_3 = self.category_selector(pred3,pred3_idx)
-		quad_4,class_val_4 = self.category_selector(pred4,pred4_idx)
-		# print("class Vals:",[class_val_1,class_val_2,class_val_3,class_val_4])
+			quad_1,class_val_1 = self.category_selector_v2(pred1)
+			quad_2,class_val_2 = self.category_selector_v2(pred2)
+			quad_3,class_val_3 = self.category_selector_v2(pred3)
+			quad_4,class_val_4 = self.category_selector_v2(pred4)
 
-		self.classifier_msg.data = [class_val_1,pred1[pred1_idx][0],class_val_2,pred2[pred2_idx][0],class_val_3,pred3[pred3_idx][0],class_val_4,pred4[pred4_idx][0]]
-		print("Classifier msg:",self.classifier_msg.data)
+			self.classifier_msg.data = [class_val_1,min(pred1),class_val_2,min(pred2),class_val_3,min(pred3),class_val_4,min(pred4)]
+			print("Classifier msg:",self.classifier_msg.data)
+
+		elif self.batch_length == 16:
+
+			pred1 = predictions[0:4]
+			pred2 = predictions[4:8]
+			pred3 = predictions[8:12]
+			pred4 = predictions[12:]
+
+			pred1_idx = np.where(pred1 == pred1.min())[0]
+			pred2_idx = np.where(pred2 == pred2.min())[0]
+			pred3_idx = np.where(pred3 == pred3.min())[0]
+			pred4_idx = np.where(pred4 == pred4.min())[0]
+
+			# print("indices:",pred1_idx,pred2_idx,pred3_idx,pred4_idx)
+
+			quad_1,class_val_1 = self.category_selector(pred1,pred1_idx)
+			quad_2,class_val_2 = self.category_selector(pred2,pred2_idx)
+			quad_3,class_val_3 = self.category_selector(pred3,pred3_idx)
+			quad_4,class_val_4 = self.category_selector(pred4,pred4_idx)
+			# print("class Vals:",[class_val_1,class_val_2,class_val_3,class_val_4])
+
+			self.classifier_msg.data = [class_val_1,pred1[pred1_idx][0],class_val_2,pred2[pred2_idx][0],class_val_3,pred3[pred3_idx][0],class_val_4,pred4[pred4_idx][0]]
+			print("Classifier msg:",self.classifier_msg.data)
 
 		#publish class of each quadrant and it's confidence [class1,confidence1,...] 0-Non-pliable 1-Pliable
 		self.classifier_pub.publish(self.classifier_msg)
@@ -175,8 +200,8 @@ class Data_Subscriber:
 
 		#visualize image
 		# cv2.imshow('Projected',projected_out)
-		cv2.imshow('Predictions',image)
-		cv2.waitKey(1)
+		# cv2.imshow('Predictions',image)
+		# cv2.waitKey(1)
 
 
 
@@ -210,27 +235,49 @@ class Data_Subscriber:
 		# ref_current_imgs.append([crop_3_img,self.ref_img])
 		# ref_current_imgs.append([crop_4_img,self.ref_img])
 		
+		if self.batch_length == 16:
+			# For batch size 16 predictions
+			ref_current_imgs.append([crop_1_img,self.ref_1])
+			ref_current_imgs.append([crop_1_img,self.ref_5])
+			ref_current_imgs.append([crop_1_img,self.ref_3])
+			ref_current_imgs.append([crop_1_img,self.ref_7])
 
-		# For batch size 16 predictions
-		ref_current_imgs.append([crop_1_img,self.ref_1])
-		ref_current_imgs.append([crop_1_img,self.ref_5])
-		ref_current_imgs.append([crop_1_img,self.ref_3])
-		ref_current_imgs.append([crop_1_img,self.ref_4])
+			ref_current_imgs.append([crop_2_img,self.ref_1])
+			ref_current_imgs.append([crop_2_img,self.ref_5])
+			ref_current_imgs.append([crop_2_img,self.ref_3])
+			ref_current_imgs.append([crop_2_img,self.ref_7])
 
-		ref_current_imgs.append([crop_2_img,self.ref_1])
-		ref_current_imgs.append([crop_2_img,self.ref_5])
-		ref_current_imgs.append([crop_2_img,self.ref_3])
-		ref_current_imgs.append([crop_2_img,self.ref_4])
+			ref_current_imgs.append([crop_3_img,self.ref_1])
+			ref_current_imgs.append([crop_3_img,self.ref_5])
+			ref_current_imgs.append([crop_3_img,self.ref_3])
+			ref_current_imgs.append([crop_3_img,self.ref_6])
 
-		ref_current_imgs.append([crop_3_img,self.ref_1])
-		ref_current_imgs.append([crop_3_img,self.ref_5])
-		ref_current_imgs.append([crop_3_img,self.ref_3])
-		ref_current_imgs.append([crop_3_img,self.ref_4])
+			ref_current_imgs.append([crop_4_img,self.ref_1])
+			ref_current_imgs.append([crop_4_img,self.ref_5])
+			ref_current_imgs.append([crop_4_img,self.ref_3])	
+			ref_current_imgs.append([crop_4_img,self.ref_6])
 
-		ref_current_imgs.append([crop_4_img,self.ref_1])
-		ref_current_imgs.append([crop_4_img,self.ref_5])
-		ref_current_imgs.append([crop_4_img,self.ref_3])	
-		ref_current_imgs.append([crop_4_img,self.ref_4])
+		elif self.batch_length == 8:
+			# For batch size 8 predictions with only grass
+			# ref_current_imgs.append([crop_1_img,self.ref_1])
+			ref_current_imgs.append([crop_1_img,self.ref_5])
+			ref_current_imgs.append([crop_1_img,self.ref_3])
+			# ref_current_imgs.append([crop_1_img,self.ref_4])
+
+			# ref_current_imgs.append([crop_2_img,self.ref_1])
+			ref_current_imgs.append([crop_2_img,self.ref_5])
+			ref_current_imgs.append([crop_2_img,self.ref_3])
+			# ref_current_imgs.append([crop_2_img,self.ref_4])
+
+			# ref_current_imgs.append([crop_3_img,self.ref_1])
+			ref_current_imgs.append([crop_3_img,self.ref_5])
+			ref_current_imgs.append([crop_3_img,self.ref_3])
+			# ref_current_imgs.append([crop_3_img,self.ref_4])
+
+			# ref_current_imgs.append([crop_4_img,self.ref_1])
+			ref_current_imgs.append([crop_4_img,self.ref_5])
+			ref_current_imgs.append([crop_4_img,self.ref_3])	
+			# ref_current_imgs.append([crop_4_img,self.ref_4])
 
 		ref_current_imgs= np.array(ref_current_imgs)
 
@@ -308,6 +355,18 @@ class Data_Subscriber:
 		# print("Q4 coords:",Q4_cols,Q4_rows)
 
 		return quadrant,class_val
+
+	def category_selector_v2(self,pred_array):
+		class_val = 2
+		quadrant =''
+		if pred_array[0] < 0.4 or pred_array[1] <0.4:
+			class_val = 1
+			quadrant = 'Pliable'
+		else:
+			class_val = 0
+			quadrant = 'Non-Pliable'
+
+		return quadrant, class_val
 
 
 	def robot_to_costmap(self, x_rob, y_rob):

@@ -16,9 +16,12 @@ import rospy
 import math
 import numpy as np
 from std_msgs.msg import Float32, Float32MultiArray
+from cv_bridge import CvBridge, CvBridgeError
+
 from geometry_msgs.msg import Twist, PointStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
-from sensor_msgs.msg import LaserScan
+import sensor_msgs.msg
+from sensor_msgs.msg import LaserScan, CompressedImage
 from tf.transformations import euler_from_quaternion
 import time
 from gazebo_msgs.srv import SetModelState, SetModelStateRequest
@@ -42,46 +45,24 @@ class Config():
 
     def __init__(self):
         
-        # robot parameter
-        #NOTE good params:
-        #NOTE 0.55,0.1,1.0,1.6,3.2,0.15,0.05,0.1,1.7,2.4,0.1,3.2,0.18
-        # self.max_speed = 0.65  # [m/s]
-        # self.min_speed = 0.0  # [m/s]
-        # self.max_yawrate = 0.4  # [rad/s]
-        # self.max_accel = 1  # [m/ss]
-        # self.max_dyawrate = 3.2  # [rad/ss]
-        # self.v_reso = 0.10  # [m/s]
-        # self.yawrate_reso = 0.10  # [rad/s]
-        # self.dt = 0.5  # [s]
-        # self.predict_time = 1.5  # [s]
-        # self.to_goal_cost_gain = 1.2 #2.4 #lower = detour
-        # self.speed_cost_gain = 0.1 #lower = faster
-        # self.obs_cost_gain = 4.0 #3.2 #lower z= fearless
-        # self.robot_radius = 0.6  # [m]
-        # self.x = 0.0
-        # self.y = 0.0
-        # self.v_x = 0.0
-        # self.w_z = 0.0
-        # self.goalX = 0.0006
-        # self.goalY = 0.0006
-        # self.th = 0.0
-        # self.r = rospy.Rate(20)
-
-        self.max_speed = 0.6  # [m/s]
-        self.min_speed = 0.05  # [m/s]
-        self.max_yawrate = 0.6  # [rad/s]
-        self.max_accel = 1  # [m/ss]
+        # Robot parameters
+        self.max_speed = 0.6     # [m/s]
+        self.min_speed = 0.0     # [m/s]
+        self.max_yawrate = 0.6   # [rad/s]
+        self.max_accel = 1       # [m/ss]
         self.max_dyawrate = 3.2  # [rad/ss]
         
-        self.v_reso = 0.20  # [m/s]
-        self.yawrate_reso = 0.10 #0.05  # [rad/s]
+        self.v_reso = 0.3 #0.20              # [m/s]
+        self.yawrate_reso = 0.2 #0.15 #0.10 #0.05  # [rad/s]
         
         self.dt = 0.5  # [s]
-        self.predict_time = 3.0 #1.5  # [s]
+        self.predict_time = 2.0 #3.0 #1.5  # [s]
         
-        self.to_goal_cost_gain = 10.0 # lower = detour
-        self.speed_cost_gain = 10   # 0.1   # lower = faster
-        self.obs_cost_gain = 3.2     # lower z= fearless
+        # 1===
+        self.to_goal_cost_gain = 5.0       # lower = detour
+        self.veg_cost_gain = 1.0
+        self.speed_cost_gain = 1.0   # 0.1   # lower = faster
+        self.obs_cost_gain = 3.2            # lower z= fearless
         
         self.robot_radius = 0.6  # [m]
         self.x = 0.0
@@ -99,6 +80,9 @@ class Config():
         self.min_u = []
 
         self.stuck_status = False
+        self.happend_once = False
+        self.stuck_count = 0
+        self.pursuing_safe_loc = False
         self.okay_locations = []
         self.stuck_locations = []
 
@@ -114,18 +98,24 @@ class Config():
         self.costmap_rgb = cv2.cvtColor(self.costmap_baselink_low,cv2.COLOR_GRAY2RGB)
         self.obs_low_mid_high = np.argwhere(self.costmap_baselink_low > 150) # should be null set
 
+        # For cost map clearing
+        self.height_thresh = 150
         self.alpha = 0.35
+        
+        # For on-field visualization
+        self.plan_map_pub = rospy.Publisher("/planning_costmap", sensor_msgs.msg.Image, queue_size=10)
+        self.viz_pub = rospy.Publisher("/viz_costmap", sensor_msgs.msg.Image, queue_size=10) 
+        self.br = CvBridge()
 
 
     # Callback for Odometry
     def assignOdomCoords(self, msg):
-
         self.x = msg.pose.pose.position.x
         self.y = msg.pose.pose.position.y
         rot_q = msg.pose.pose.orientation
         (roll,pitch,theta) = euler_from_quaternion ([rot_q.x,rot_q.y,rot_q.z,rot_q.w])
-        
         # (roll,pitch,theta) = euler_from_quaternion ([rot_q.z, -rot_q.x, -rot_q.y, rot_q.w]) # used when lego-loam is used
+        
         self.th = theta
 
         # Get robot's current velocities
@@ -163,25 +153,21 @@ class Config():
     # Callback for local costmap from move_base and converting it wrt robot frame
     def high_costmap_callback(self, data):
 
-        print("Received high local costmap!")
+        # print("Received high local costmap!")
 
         costmap_2d = np.reshape(data.data, (-1, int(math.sqrt(len(data.data)))))
         costmap_2d = np.reshape(data.data, (int(math.sqrt(len(data.data))), -1))
         costmap_2d = np.rot90(np.fliplr(costmap_2d), 1, (1, 0))
 
         cm_image = Image.fromarray(np.uint8(costmap_2d))
-
-        yaw_deg = self.th*180/math.pi
-
-        # print("Yaw angle = ", yaw_deg)
-
+        yaw_deg = 0 # Now cost map published wrt baselink
         cm_baselink_pil = cm_image.rotate(-yaw_deg)
         self.costmap_baselink_high = np.array(cm_baselink_pil)
 
 
     def mid_costmap_callback(self, data):
 
-        print("Received mid local costmap!")
+        # print("Received mid local costmap!")
 
         costmap_2d = np.reshape(data.data, (-1, int(math.sqrt(len(data.data)))))
         costmap_2d = np.reshape(data.data, (int(math.sqrt(len(data.data))), -1))
@@ -189,18 +175,15 @@ class Config():
 
         cm_image = Image.fromarray(np.uint8(costmap_2d))
 
-        yaw_deg = self.th*180/math.pi
-
-        # print("Yaw angle = ", yaw_deg)
-
+        # yaw_deg = self.th*180/math.pi
+        yaw_deg = 0
         cm_baselink_pil = cm_image.rotate(-yaw_deg)
         self.costmap_baselink_mid = np.array(cm_baselink_pil)
 
 
-
     def low_costmap_callback(self, data):
 
-        print("Received low local costmap!")
+        # print("Received low local costmap!")
 
         costmap_2d = np.reshape(data.data, (-1, int(math.sqrt(len(data.data)))))
         costmap_2d = np.reshape(data.data, (int(math.sqrt(len(data.data))), -1))
@@ -208,10 +191,8 @@ class Config():
 
         cm_image = Image.fromarray(np.uint8(costmap_2d))
 
-        yaw_deg = self.th*180/math.pi
-
-        print("Yaw angle = ", yaw_deg)
-
+        # yaw_deg = self.th*180/math.pi
+        yaw_deg = 0 # check costmap_local.yaml. The frame has been changed from odom to base_link
         cm_baselink_pil = cm_image.rotate(-yaw_deg)
         self.costmap_baselink_low = np.array(cm_baselink_pil)
         self.costmap_rgb = cv2.cvtColor(self.costmap_baselink_low, cv2.COLOR_GRAY2RGB)
@@ -220,70 +201,52 @@ class Config():
         rob_x = int(self.costmap_rgb.shape[0]/2)
         rob_y = int(self.costmap_rgb.shape[1]/2)
 
-
         # Visualization
         # Mark the robot on costmap 
-        self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 3, (255, 0, 0), -1)
+        self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 4, (255, 0, 255), -1)
         self.costmap_sum()
         
         # dim = (int(self.costmap_baselink_low.shape[1] * self.scale_percent / 100), int(self.costmap_baselink_low.shape[0] * self.scale_percent / 100)) 
         # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
-
         # cv2.imshow('costmap_wrt_robot', resized)
         # cv2.waitKey(3)
 
 
     def costmap_sum(self):
-        
         costmap_sum = self.costmap_baselink_low + self.costmap_baselink_mid + self.costmap_baselink_high
         
-        self.obs_low_mid_high = np.argwhere(costmap_sum > 150) # (returns row, col)
-
-        # Mark the robot
-        # costmap_sum_rgb = cv2.cvtColor(costmap_sum, cv2.COLOR_GRAY2RGB)
-        # rob_x = int(costmap_sum_rgb.shape[0]/2)
-        # rob_y = int(costmap_sum_rgb.shape[1]/2) 
-        # costmap_sum_rgb = cv2.circle(costmap_sum_rgb, (rob_x, rob_y), 3, (255, 0, 0), 2) # center is (col, row)
-
+        self.obs_low_mid_high = np.argwhere(costmap_sum > self.height_thresh) # (returns row, col)
 
         if(self.obs_low_mid_high.shape[0] != 0):
             self.costmap_rgb = self.tall_obstacle_marker(self.costmap_rgb, self.obs_low_mid_high)
         else:
-            # final = self.costmap_rgb
             pass
-
-        # dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
-        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
-        
-        # cv2.imshow('costmap_sum', resized)
-        # cv2.waitKey(3)
 
 
     def tall_obstacle_marker(self, rgb_image, centers):
-
-        # Marking centers red
+        # Marking centers red, orange = (0, 150, 255)
         rgb_image[centers[:, 0], centers[:, 1], 0] = 0
-        rgb_image[centers[:, 0], centers[:, 1], 1] = 0
+        rgb_image[centers[:, 0], centers[:, 1], 1] = 150
         rgb_image[centers[:, 0], centers[:, 1], 2] = 255
-
         return rgb_image
 
 
+    # 2===
     def classification_callback(self, data):
 
-        print("Received classification results!")
+        # print("Received classification results!")
 
         # Define grid cells belonging to each quadrant of the image
         # (col, row) convention
-        top_left = [(84, 0), (100, 49)]
-        top_right = [(100, 0), (117, 49)]
-        bottom_left = [(84, 49), (100, 82)]
-        bottom_right = [(100, 49), (117, 82)]
+        # top_left = [(84, 0), (100, 49)]
+        # top_right = [(100, 0), (117, 49)]
+        # bottom_left = [(84, 49), (100, 82)]
+        # bottom_right = [(100, 49), (117, 82)]
 
-        Q1 = np.array([(col, row) for col in range(84, 100+1) for row in range(0, 49+1)])
-        Q2 = np.array([(col, row) for col in range(100, 117+1) for row in range(0, 49+1)])
-        Q3 = np.array([(col, row) for col in range(84, 100+1) for row in range(49, 82+1)])
-        Q4 = np.array([(col, row) for col in range(100, 117+1) for row in range(49, 82+1)])
+        # Q1 = np.array([(col, row) for col in range(84, 100+1) for row in range(0, 49+1)])
+        # Q2 = np.array([(col, row) for col in range(100, 117+1) for row in range(0, 49+1)])
+        # Q3 = np.array([(col, row) for col in range(84, 100+1) for row in range(49, 82+1)])
+        # Q4 = np.array([(col, row) for col in range(100, 117+1) for row in range(49, 82+1)])
 
         # Sanity check for modifying costmap for navigation. THIS IS THE CORRECT CONVENTION.
         # Note: (row, col) convention is used for np array
@@ -304,6 +267,15 @@ class Config():
         # cv2.imshow('costmap', resized)
         # cv2.waitKey(3)
 
+        top_left = [(84, 0), (100, 49)]
+        top_right = [(100, 0), (117, 49)]
+        bottom_left = [(84, 49), (100, 100)]
+        bottom_right = [(100, 49), (117, 100)]
+
+        Q1 = np.array([(col, row) for col in range(84, 100+1) for row in range(0, 49+1)])
+        Q2 = np.array([(col, row) for col in range(100, 117+1) for row in range(0, 49+1)])
+        Q3 = np.array([(col, row) for col in range(84, 100+1) for row in range(49, 100+1)])
+        Q4 = np.array([(col, row) for col in range(100, 117+1) for row in range(49, 100+1)])
 
         # Clear Costmap
         # NOTE: Modify this based on the actual data being published
@@ -317,53 +289,101 @@ class Config():
         conf2 = math.exp(-self.alpha * data.data[3])
         conf3 = math.exp(-self.alpha * data.data[5])
         conf4 = math.exp(-self.alpha * data.data[7])
-
+        # print(conf1, conf2, conf3, conf4)
         # Quadrant 1
         # TODO: Check for tall obstacles
-        if (veg1 == 1):
-            # Clear cost map
-            self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = (self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
+        # if (veg1 == 1):
+        #     # self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = (self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
+        #     self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = 0
+        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1)
 
+        # else:
+        #     # Don't clear costmap
+        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,0,255), thickness= 1)
+
+
+        # # Quadrant 2
+        # if (veg2 == 1):
+        #     # self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = (self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
+        #     self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = 0
+        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1)
+        # else:
+        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,0,255), thickness= 1)
+
+
+        # # Quadrant 3
+        # if (veg3 == 1):
+        #     # Clear cost map
+        #     # self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = (self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
+        #     self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = 0
+        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,255,0), thickness= 1)
+        # else:
+        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,0,255), thickness= 1)
+
+
+        # # Quadrant 4
+        # if (veg4 == 1):
+        #     # Clear cost map
+        #     # self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = (self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
+        #     self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = 0
+        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,255,0), thickness= 1) 
+        # else:
+        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,0,255), thickness= 1)
+
+        conf_thresh = 0.90
+
+        if (veg1 == 1 and conf1 >= conf_thresh):
+            # self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = (self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
+            self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = 0
+            self.costmap_rgb[Q1[:,1], Q1[:,0], :] = 0
             cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1)
 
         else:
             # Don't clear costmap
-            cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(255,0,0), thickness= 1)
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,0,255), thickness= 1)
 
 
         # Quadrant 2
-        if (veg2 == 1):
-            # Clear cost map
-            self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = (self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
+        if (veg2 == 1 and conf2 >= conf_thresh):
+            # self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = (self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
+            self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = 0
+            self.costmap_rgb[Q2[:,1], Q2[:,0], :] = 0
             cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1)
         else:
-            cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(255,0,0), thickness= 1)
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,0,255), thickness= 1)
 
 
         # Quadrant 3
-        if (veg3 == 1):
+        if (veg3 == 1 and conf3 >= conf_thresh):
             # Clear cost map
-            self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = (self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
-            cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(0,255,0), thickness= 1)
+            # self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = (self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
+            self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = 0
+            self.costmap_rgb[Q3[:,1], Q3[:,0], :] = 0
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,255,0), thickness= 1)
         else:
-            cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 82), color=(255,0,0), thickness= 1)
+            cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,0,255), thickness= 1)
 
 
         # Quadrant 4
-        if (veg4 == 1):
+        if (veg4 == 1 and conf4 >= conf_thresh):
             # Clear cost map
-            self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = (self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
-            cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(0,255,0), thickness= 1) 
+            # self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = (self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
+            self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = 0
+            self.costmap_rgb[Q4[:,1], Q4[:,0], :] = 0
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,255,0), thickness= 1) 
         else:
-            cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 82), color=(255,0,0), thickness= 1) 
+            cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,0,255), thickness= 1) 
 
         self.costmap_baselink_low = self.costmap_baselink_low.astype('uint8')
 
-        cv2.imshow("Modified Costmap", self.costmap_baselink_low)
-        dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
-        resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
-        cv2.imshow('costmap', resized)
-        cv2.waitKey(3)
+        self.plan_map_pub.publish(self.br.cv2_to_imgmsg(self.costmap_baselink_low, encoding="mono8"))
+        self.viz_pub.publish(self.br.cv2_to_imgmsg(self.costmap_rgb, encoding="bgr8"))
+
+        # cv2.imshow("Modified Costmap", self.costmap_baselink_low)
+        # dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
+        # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+        # cv2.imshow('costmap', resized)
+        # cv2.waitKey(3)
 
 
 
@@ -478,6 +498,7 @@ def calc_dynamic_window(x, config):
     dw = [max(Vs[0], Vd[0]), min(Vs[1], Vd[1]),
           max(Vs[2], Vd[2]), min(Vs[3], Vd[3])]
 
+    # print("Dynamic Window: ", dw)
     return dw
 
 
@@ -496,6 +517,7 @@ def calc_trajectory(xinit, v, y, config):
     return traj
 
 
+# 3===
 # Calculate trajectory, costings, and return velocities to apply to robot
 def calc_final_input(x, u, dw, config, ob):
 
@@ -506,11 +528,12 @@ def calc_final_input(x, u, dw, config, ob):
     
     yellow = (0, 255, 255)
     green = (0, 255, 0)
+    orange = (0, 150, 255)
 
     count = 0
     # evaluate all trajectory with sampled input in dynamic window
-    for v in np.arange(dw[0], dw[1], config.v_reso):
-        for w in np.arange(dw[2], dw[3], config.yawrate_reso):
+    for v in np.arange(dw[0], dw[1] + config.v_reso/2, config.v_reso):
+        for w in np.arange(dw[2], dw[3] + config.yawrate_reso/2, config.yawrate_reso):
             count = count + 1 
             
             traj = calc_trajectory(xinit, v, w, config)
@@ -518,19 +541,19 @@ def calc_final_input(x, u, dw, config, ob):
             # calc costs with weighted gains
             to_goal_cost = config.to_goal_cost_gain * calc_to_goal_cost(traj, config)
             speed_cost = config.speed_cost_gain * (config.max_speed - traj[-1, 3]) # end v should be as close to max_speed to have low cost
-            social_cost = calc_social_cost(traj, config)
+            veg_cost = config.veg_cost_gain * calc_veg_cost(traj, config)
             # ob_cost = config.obs_cost_gain * calc_obstacle_cost(traj, ob, config)
 
 
-            # final_cost = to_goal_cost + speed_cost + ob_cost + social_cost
-            final_cost = to_goal_cost + speed_cost + social_cost
+            # final_cost = to_goal_cost + speed_cost + ob_cost + veg_cost
+            final_cost = to_goal_cost + speed_cost + veg_cost
             
-            # print(count, "v,w = %.2f %.2f"% (v, w))
-            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "social_cost = %.2f"% social_cost, "final_cost = %.2f"% final_cost)
-            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "obs_cost = %.2f"% ob_cost, "social_cost = %.2f"% social_cost, "final_cost = %.2f"% final_cost)
+            print(count, "v,w = %.2f %.2f"% (v, w))
+            print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "veg_cost = %.2f"% veg_cost, "final_cost = %.2f"% final_cost)
+            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "obs_cost = %.2f"% ob_cost, "veg_cost = %.2f"% veg_cost, "final_cost = %.2f"% final_cost)
 
             
-            config.costmap_rgb = draw_traj(config, traj, yellow)
+            # config.costmap_rgb = draw_traj(config, traj, orange)
 
             # search minimum trajectory
             if min_cost >= final_cost:
@@ -538,20 +561,21 @@ def calc_final_input(x, u, dw, config, ob):
                 config.min_u = [v, w]
 
     # print("Robot's current velocities", [config.v_x, config.w_z])
-    traj = calc_trajectory(xinit, config.min_u[0], config.min_u[1], config)
+    # traj = calc_trajectory(xinit, config.min_u[0], config.min_u[1], config)
+    traj = calc_trajectory(xinit, config.v_x, config.w_z, config)
     to_goal_cost = config.to_goal_cost_gain * calc_to_goal_cost(traj, config)
-
-    print("min_u = %.2f %.2f"% (config.min_u[0], config.min_u[1]), "Goal cost = %.2f"% to_goal_cost, "min cost = %.2f"% min_cost)
+    veg_cost_min = config.veg_cost_gain * calc_veg_cost(traj, config)
+    print("min_u = %.2f %.2f"% (config.min_u[0], config.min_u[1]), "Goal cost = %.2f"% to_goal_cost, "Veg cost = %.2f"% veg_cost_min, "min cost = %.2f"% min_cost)
     config.costmap_rgb = draw_traj(config, traj, green)
 
     # Visualization
-    dim = (int(config.costmap_baselink.shape[1] * config.scale_percent / 100), \
-     int(config.costmap_baselink.shape[0] * config.scale_percent / 100)) 
-    resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
+    # dim = (int(config.costmap_rgb.shape[1] * config.scale_percent / 100), \
+    #  int(config.costmap_rgb.shape[0] * config.scale_percent / 100)) 
+    # resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
     
-    cv2.imshow('costmap_wrt_robot', resized)
+    # cv2.imshow('costmap_wrt_robot', resized)
     # cv2.imshow('costmap_baselink', config.costmap_baselink)
-    cv2.waitKey(3)
+    # cv2.waitKey(3)
     
     return config.min_u
     
@@ -602,11 +626,13 @@ def calc_to_goal_cost(traj, config):
     else:
         dy = abs(config.goalY - 0)
 
+    # print("dx, dy", dx, dy)
     cost = math.sqrt(dx**2 + dy**2)
+    # print("Cost: ", cost)
     return cost
 
 
-def calc_social_cost(traj, config):
+def calc_veg_cost(traj, config):
     # print("Trajectory end-points wrt odom", traj[-1, 0], traj[-1, 1])
 
     # Convert traj points to robot frame
@@ -625,7 +651,7 @@ def calc_social_cost(traj, config):
 
     # !!! NOTE !!!: IN COSTMAP, VALUES SHOULD BE ACCESSED AS (ROW,COL). FOR VIZ, IT SHOULD BE (COL, ROW)! 
     
-    # if (config.costmap_baselink[int(cm_row), int(cm_col)] < SOCIAL_COST):
+    # if (config.costmap_baselink[int(cm_row), int(cm_col)] < veg_COST):
     #     print("Costmap coordinates of end-points: ", (int(cm_col), int(cm_row)))
     #     config.costmap_rgb = cv2.circle(config.costmap_rgb, (int(cm_col), int(cm_row)), 1, (255, 255, 255), 1)
     #     print("Value at end-point = ", config.costmap_baselink[int(cm_row), int(cm_col)])
@@ -633,9 +659,9 @@ def calc_social_cost(traj, config):
     # print("Max and min of costmap: ", np.max(config.costmap_baselink), np.min(config.costmap_baselink))
 
     # TODO: This should be the modified costmap from the classification subscriber
-    social_cost = config.costmap_baselink[int(cm_row), int(cm_col)]
+    veg_cost = config.costmap_baselink_low[int(cm_row), int(cm_col)]
 
-    return social_cost
+    return veg_cost
 
 
 
@@ -716,35 +742,51 @@ def is_robot_stuck(config):
     # print("Robot's stuck locations: ", config.stuck_locations)
     # print("Robot's okay locations: ", config.okay_locations)
     # print("DWA Action: ", config.min_u)
+    # print("Robot's current vel: ", config.v_x, config.w_z)
+    
+    if ((not config.pursuing_safe_loc) and (config.min_u != [0, 0] and config.min_u != []) and (abs(config.v_x) <= 0.05 and abs(config.w_z) <= 0.05)):
+        config.stuck_count = config.stuck_count + 1
+    else:
+        config.stuck_count = 0
 
-    if ((config.min_u != [0, 0] and config.min_u != []) and (abs(config.v_x) <= 0.05 and abs(config.w_z) <= 0.05)):
+    if (config.stuck_count > 15):
         print("Robot could be stuck!")
-        if ([math.floor(config.x), math.floor(config.y)] not in config.stuck_locations): 
+        if (([math.floor(config.x), math.floor(config.y)] not in config.stuck_locations) and ([math.floor(config.x), math.floor(config.y)] not in config.okay_locations)): 
             # Stuck locations will only have integer coordinates. The "resolution" of the list is 1 meter.
             # Store stuck location
             config.stuck_locations.append([math.floor(config.x), math.floor(config.y)]) 
 
-        return True
+        return True # Stuck_status
     
     else:
-        if ([math.floor(config.x), math.floor(config.y)] not in config.okay_locations): 
+        if (([math.floor(config.x), math.floor(config.y)] not in config.okay_locations) and ([math.floor(config.x), math.floor(config.y)] not in config.stuck_locations)): 
             # Okay locations will only have integer coordinates. The "resolution" of the list is 1 meter.
             # Store stuck location
             config.okay_locations.append([math.floor(config.x), math.floor(config.y)])
+
+            # Experimental!
+            # if (len(config.okay_locations) > 5 and config.happend_once == False):
+            #     print("Collected 5 points. Stuck status = True!")
+            #     config.happend_once = True
+            #     return True
+
         return False
 
         
 
-def recover(config, speed):
+def recover(config):
+    speed = Twist()
 
-    x_odom = config.okay_locations[-1][0]
-    y_odom = config.okay_locations[-1][1]
+    config.pursuing_safe_loc = True
+
+    x_odom = config.okay_locations[-2][0]
+    y_odom = config.okay_locations[-2][1]
 
     # Convert the goal locations wrt robot frame. The error will simply be the goals.
     error_x = (x_odom - config.x)*math.cos(config.th) + (y_odom - config.y)*math.sin(config.th)
     error_y = -(x_odom - config.x)*math.sin(config.th) + (y_odom - config.y)*math.cos(config.th)
 
-    print("Recovery --- RobX, RobY --- Errors ")
+    print("(Recovery Point) --- (RobX, RobY) --- (Error X, Error Y) ")
     print(x_odom, y_odom, config.x, config.y, error_x, error_y)
 
     # Proportional gain
@@ -756,8 +798,17 @@ def recover(config, speed):
     # For a differential drive robot, use difference in angle and use it to compute w
     speed.linear.x = vel_x
     speed.linear.y = vel_y
+    speed.angular.z = 0.0
 
     print(vel_x, vel_y)
+
+    if (error_x < 0.5 and error_y < 0.5):
+        print("Reached Safe Location!")
+        config.pursuing_safe_loc = False
+        config.stuck_status = False
+
+        # Wait for 5 secs
+        # time.sleep(5)
 
     return speed
 
@@ -782,9 +833,13 @@ def main():
     # subCostmap = rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
     subVegClassification = rospy.Subscriber("/vegetation_classes", Float32MultiArray, config.classification_callback)
 
-
-    pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-    # pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
+    choice = input("Publish? 1 or 0")
+    if(int(choice) == 1):
+        pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+        print("Publishing to cmd_vel")
+    else:
+        pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
+        print("Not publishing!")
 
     speed = Twist()
     
@@ -811,9 +866,10 @@ def main():
         # Pursuing but not reached the goal
         elif (atGoal(config,x) == False): 
 
-            if (config.stuck_status == True):
+            # Checking if robot is stuck
+            if (config.stuck_status == True or config.pursuing_safe_loc == True):
                 # Publish velocities accordingly
-                speed = recover(config, speed)
+                speed = recover(config)
             
             else:
                 u = dwa_control(x, u, config, obs.obst)

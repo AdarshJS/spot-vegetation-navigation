@@ -52,8 +52,8 @@ class Config():
         self.max_accel = 1       # [m/ss]
         self.max_dyawrate = 3.2  # [rad/ss]
         
-        self.v_reso = 0.3 #0.20              # [m/s]
-        self.yawrate_reso = 0.2 #0.15 #0.10 #0.05  # [rad/s]
+        self.v_reso = 0.30 #0.20              # [m/s]
+        self.yawrate_reso = 0.20  # [rad/s]
         
         self.dt = 0.5  # [s]
         self.predict_time = 2.0 #3.0 #1.5  # [s]
@@ -61,7 +61,7 @@ class Config():
         # 1===
         self.to_goal_cost_gain = 5.0       # lower = detour
         self.veg_cost_gain = 1.0
-        self.speed_cost_gain = 1.0   # 0.1   # lower = faster
+        self.speed_cost_gain = 0.1   # 0.1   # lower = faster
         self.obs_cost_gain = 3.2            # lower z= fearless
         
         self.robot_radius = 0.6  # [m]
@@ -117,6 +117,7 @@ class Config():
         # (roll,pitch,theta) = euler_from_quaternion ([rot_q.z, -rot_q.x, -rot_q.y, rot_q.w]) # used when lego-loam is used
         
         self.th = theta
+        # print("Theta of body wrt odom:", self.th/0.0174533)
 
         # Get robot's current velocities
         self.v_x = msg.twist.twist.linear.x
@@ -224,9 +225,9 @@ class Config():
 
 
     def tall_obstacle_marker(self, rgb_image, centers):
-        # Marking centers red, orange = (0, 150, 255)
+        # Marking centers red = (0, 0, 255), or orange = (0, 150, 255)
         rgb_image[centers[:, 0], centers[:, 1], 0] = 0
-        rgb_image[centers[:, 0], centers[:, 1], 1] = 150
+        rgb_image[centers[:, 0], centers[:, 1], 1] = 0
         rgb_image[centers[:, 0], centers[:, 1], 2] = 255
         return rgb_image
 
@@ -290,52 +291,13 @@ class Config():
         conf3 = math.exp(-self.alpha * data.data[5])
         conf4 = math.exp(-self.alpha * data.data[7])
         # print(conf1, conf2, conf3, conf4)
-        # Quadrant 1
-        # TODO: Check for tall obstacles
-        # if (veg1 == 1):
-        #     # self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = (self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
-        #     self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = 0
-        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1)
-
-        # else:
-        #     # Don't clear costmap
-        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,0,255), thickness= 1)
-
-
-        # # Quadrant 2
-        # if (veg2 == 1):
-        #     # self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = (self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
-        #     self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = 0
-        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1)
-        # else:
-        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,0,255), thickness= 1)
-
-
-        # # Quadrant 3
-        # if (veg3 == 1):
-        #     # Clear cost map
-        #     # self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = (self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
-        #     self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = 0
-        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,255,0), thickness= 1)
-        # else:
-        #     cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,0,255), thickness= 1)
-
-
-        # # Quadrant 4
-        # if (veg4 == 1):
-        #     # Clear cost map
-        #     # self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = (self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
-        #     self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = 0
-        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,255,0), thickness= 1) 
-        # else:
-        #     cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,0,255), thickness= 1)
 
         conf_thresh = 0.90
 
         if (veg1 == 1 and conf1 >= conf_thresh):
             # self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = (self.costmap_baselink_low[Q1[:,1], Q1[:,0]] * (1-conf1))
             self.costmap_baselink_low[Q1[:,1], Q1[:,0]] = 0
-            self.costmap_rgb[Q1[:,1], Q1[:,0], :] = 0
+            # self.costmap_rgb[Q1[:,1], Q1[:,0], :] = 0
             cv2.rectangle(self.costmap_rgb, pt1=(84, 0), pt2=(100, 49), color=(0,255,0), thickness= 1)
 
         else:
@@ -347,7 +309,7 @@ class Config():
         if (veg2 == 1 and conf2 >= conf_thresh):
             # self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = (self.costmap_baselink_low[Q2[:,1], Q2[:,0]] * (1-conf2))
             self.costmap_baselink_low[Q2[:,1], Q2[:,0]] = 0
-            self.costmap_rgb[Q2[:,1], Q2[:,0], :] = 0
+            # self.costmap_rgb[Q2[:,1], Q2[:,0], :] = 0
             cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,255,0), thickness= 1)
         else:
             cv2.rectangle(self.costmap_rgb, pt1=(100, 0), pt2=(117, 49), color=(0,0,255), thickness= 1)
@@ -358,7 +320,7 @@ class Config():
             # Clear cost map
             # self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = (self.costmap_baselink_low[Q3[:,1], Q3[:,0]] * (1-conf3))
             self.costmap_baselink_low[Q3[:,1], Q3[:,0]] = 0
-            self.costmap_rgb[Q3[:,1], Q3[:,0], :] = 0
+            # self.costmap_rgb[Q3[:,1], Q3[:,0], :] = 0
             cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,255,0), thickness= 1)
         else:
             cv2.rectangle(self.costmap_rgb, pt1=(84, 49), pt2=(100, 100), color=(0,0,255), thickness= 1)
@@ -369,7 +331,7 @@ class Config():
             # Clear cost map
             # self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = (self.costmap_baselink_low[Q4[:,1], Q4[:,0]] * (1-conf4))
             self.costmap_baselink_low[Q4[:,1], Q4[:,0]] = 0
-            self.costmap_rgb[Q4[:,1], Q4[:,0], :] = 0
+            # self.costmap_rgb[Q4[:,1], Q4[:,0], :] = 0
             cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,255,0), thickness= 1) 
         else:
             cv2.rectangle(self.costmap_rgb, pt1=(100, 49), pt2=(117, 100), color=(0,0,255), thickness= 1) 
@@ -528,6 +490,7 @@ def calc_final_input(x, u, dw, config, ob):
     
     yellow = (0, 255, 255)
     green = (0, 255, 0)
+    blue = (255, 0, 0)
     orange = (0, 150, 255)
 
     count = 0
@@ -544,16 +507,16 @@ def calc_final_input(x, u, dw, config, ob):
             veg_cost = config.veg_cost_gain * calc_veg_cost(traj, config)
             # ob_cost = config.obs_cost_gain * calc_obstacle_cost(traj, ob, config)
 
-
-            # final_cost = to_goal_cost + speed_cost + ob_cost + veg_cost
-            final_cost = to_goal_cost + speed_cost + veg_cost
+            # final_cost = to_goal_cost + veg_cost
+            final_cost = to_goal_cost + veg_cost + speed_cost
+            # final_cost = to_goal_cost*(1 + veg_cost)
             
-            print(count, "v,w = %.2f %.2f"% (v, w))
-            print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "veg_cost = %.2f"% veg_cost, "final_cost = %.2f"% final_cost)
-            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "obs_cost = %.2f"% ob_cost, "veg_cost = %.2f"% veg_cost, "final_cost = %.2f"% final_cost)
+            # print(count, "v,w = %.2f %.2f"% (v, w))
+            # print("Goal cost = %.2f"% to_goal_cost, "veg_cost = %.2f"% veg_cost, "final_cost = %.2f"% final_cost)
+            # print("Goal cost = %.2f"% to_goal_cost, "speed_cost = %.2f"% speed_cost, "veg_cost = %.2f"% veg_cost, "final_cost = %.2f"% final_cost)
 
             
-            # config.costmap_rgb = draw_traj(config, traj, orange)
+            config.costmap_rgb = draw_traj(config, traj, yellow)
 
             # search minimum trajectory
             if min_cost >= final_cost:
@@ -561,11 +524,12 @@ def calc_final_input(x, u, dw, config, ob):
                 config.min_u = [v, w]
 
     # print("Robot's current velocities", [config.v_x, config.w_z])
-    # traj = calc_trajectory(xinit, config.min_u[0], config.min_u[1], config)
-    traj = calc_trajectory(xinit, config.v_x, config.w_z, config)
+    # traj = calc_trajectory(xinit, config.v_x, config.w_z, config) # This leads to buggy visualization
+
+    traj = calc_trajectory(xinit, config.min_u[0], config.min_u[1], config)
     to_goal_cost = config.to_goal_cost_gain * calc_to_goal_cost(traj, config)
     veg_cost_min = config.veg_cost_gain * calc_veg_cost(traj, config)
-    print("min_u = %.2f %.2f"% (config.min_u[0], config.min_u[1]), "Goal cost = %.2f"% to_goal_cost, "Veg cost = %.2f"% veg_cost_min, "min cost = %.2f"% min_cost)
+    print("min_u = %.2f %.2f"% (config.min_u[0], config.min_u[1]), "Goal cost = %.2f"% to_goal_cost, "Veg cost = %.2f"% veg_cost_min, "Min cost = %.2f"% min_cost)
     config.costmap_rgb = draw_traj(config, traj, green)
 
     # Visualization
@@ -573,7 +537,7 @@ def calc_final_input(x, u, dw, config, ob):
     #  int(config.costmap_rgb.shape[0] * config.scale_percent / 100)) 
     # resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
     
-    # cv2.imshow('costmap_wrt_robot', resized)
+    # # cv2.imshow('costmap_wrt_robot', resized)
     # cv2.imshow('costmap_baselink', config.costmap_baselink)
     # cv2.waitKey(3)
     
@@ -624,7 +588,7 @@ def calc_to_goal_cost(traj, config):
     elif (config.goalY < 0 and traj[-1,1] >= 0):
         dy = traj[-1,1] - config.goalY
     else:
-        dy = abs(config.goalY - 0)
+        dy = abs(config.goalY - traj[-1,1])
 
     # print("dx, dy", dx, dy)
     cost = math.sqrt(dx**2 + dy**2)

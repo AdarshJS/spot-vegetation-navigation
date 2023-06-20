@@ -1,11 +1,10 @@
-1_dataset/
-2_dataset_compiled/
-3_dataset_lite/
-4_dataset_cropped/
-5_dataset_final/
+dataset_new/
+dataset_old/
 rosbags/
 siamese_network/med_dataset/
+siamese_network/small_dataset_old/
 siamese_network/small_dataset/
 5_dataset_final_old/
 5_dataset_final.zip
 *.pyc
+siamese_network/pyimagesearch/__pycache__/*.pyc

@@ -99,7 +99,7 @@ class Config():
         self.obs_low_mid_high = np.argwhere(self.costmap_baselink_low > 150) # should be null set
 
         # For cost map clearing
-        self.height_thresh = 150
+        self.height_thresh = 75#150
         self.alpha = 0.35
         
         # For on-field visualization
@@ -202,7 +202,7 @@ class Config():
         rob_x = int(self.costmap_rgb.shape[0]/2)
         rob_y = int(self.costmap_rgb.shape[1]/2)
 
-        # Visualization
+        # VISUALIZATION
         # Mark the robot on costmap 
         self.costmap_rgb = cv2.circle(self.costmap_rgb, (rob_x, rob_y), 4, (255, 0, 255), -1)
         self.costmap_sum()
@@ -214,8 +214,8 @@ class Config():
 
 
     def costmap_sum(self):
-        costmap_sum = self.costmap_baselink_low + self.costmap_baselink_mid + self.costmap_baselink_high
-        
+        # costmap_sum = self.costmap_baselink_low + self.costmap_baselink_mid + self.costmap_baselink_high
+        costmap_sum = self.costmap_baselink_high
         self.obs_low_mid_high = np.argwhere(costmap_sum > self.height_thresh) # (returns row, col)
 
         if(self.obs_low_mid_high.shape[0] != 0):
@@ -341,6 +341,7 @@ class Config():
         self.plan_map_pub.publish(self.br.cv2_to_imgmsg(self.costmap_baselink_low, encoding="mono8"))
         self.viz_pub.publish(self.br.cv2_to_imgmsg(self.costmap_rgb, encoding="bgr8"))
 
+        # VISUALIZATION
         # cv2.imshow("Modified Costmap", self.costmap_baselink_low)
         # dim = (int(self.costmap_rgb.shape[1] * self.scale_percent / 100), int(self.costmap_rgb.shape[0] * self.scale_percent / 100)) 
         # resized = cv2.resize(self.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
@@ -476,6 +477,10 @@ def calc_trajectory(xinit, v, y, config):
         traj = np.vstack((traj, x))
         time += config.dt # next sample
 
+    # print("Trajectory: ", traj)
+    # print("End point:", traj[-1, 0], traj[-1, 1])
+    # print("Mid point: ", traj[math.floor(len(traj)/2), 0], traj[math.floor(len(traj)/2), 1])
+
     return traj
 
 
@@ -532,7 +537,7 @@ def calc_final_input(x, u, dw, config, ob):
     print("min_u = %.2f %.2f"% (config.min_u[0], config.min_u[1]), "Goal cost = %.2f"% to_goal_cost, "Veg cost = %.2f"% veg_cost_min, "Min cost = %.2f"% min_cost)
     config.costmap_rgb = draw_traj(config, traj, green)
 
-    # Visualization
+    # VISUALIZATION
     # dim = (int(config.costmap_rgb.shape[1] * config.scale_percent / 100), \
     #  int(config.costmap_rgb.shape[0] * config.scale_percent / 100)) 
     # resized = cv2.resize(config.costmap_rgb, dim, interpolation = cv2.INTER_AREA)
@@ -603,8 +608,15 @@ def calc_veg_cost(traj, config):
     x_end_odom = traj[-1, 0]
     y_end_odom = traj[-1, 1]
 
+    # Trajectory approx mid-points
+    x_mid_odom = traj[math.floor(len(traj)/2), 0]
+    y_mid_odom = traj[math.floor(len(traj)/2), 1]
+
     x_end_rob = (x_end_odom - config.x)*math.cos(config.th) + (y_end_odom - config.y)*math.sin(config.th)
     y_end_rob = -(x_end_odom - config.x)*math.sin(config.th) + (y_end_odom - config.y)*math.cos(config.th)
+    x_mid_rob = (x_mid_odom - config.x)*math.cos(config.th) + (y_mid_odom - config.y)*math.sin(config.th)
+    y_mid_rob = -(x_mid_odom - config.x)*math.sin(config.th) + (y_mid_odom - config.y)*math.cos(config.th)
+
 
     # int() and floor() behave differently with -ve numbers. int() is symmetric. 
     # cm_col = config.costmap_shape[0]/2 - math.floor(y_end_rob/config.costmap_resolution)
@@ -612,18 +624,23 @@ def calc_veg_cost(traj, config):
     cm_col = config.costmap_shape[0]/2 - int(y_end_rob/config.costmap_resolution)
     cm_row = config.costmap_shape[1]/2 - int(x_end_rob/config.costmap_resolution)
 
+    cm_mid_col = config.costmap_shape[0]/2 - int(y_mid_rob/config.costmap_resolution)
+    cm_mid_row = config.costmap_shape[1]/2 - int(x_mid_rob/config.costmap_resolution)
+
 
     # !!! NOTE !!!: IN COSTMAP, VALUES SHOULD BE ACCESSED AS (ROW,COL). FOR VIZ, IT SHOULD BE (COL, ROW)! 
+    # Sanity Check: Drawing end and mid points
+    # config.costmap_rgb = cv2.circle(config.costmap_rgb, (int(cm_col), int(cm_row)), 1, (255, 255, 255), 1)
+    # config.costmap_rgb = cv2.circle(config.costmap_rgb, (int(cm_mid_col), int(cm_mid_row)), 1, (0, 255, 0), 1)
     
-    # if (config.costmap_baselink[int(cm_row), int(cm_col)] < veg_COST):
-    #     print("Costmap coordinates of end-points: ", (int(cm_col), int(cm_row)))
-    #     config.costmap_rgb = cv2.circle(config.costmap_rgb, (int(cm_col), int(cm_row)), 1, (255, 255, 255), 1)
-    #     print("Value at end-point = ", config.costmap_baselink[int(cm_row), int(cm_col)])
-
+    # print("Value at end-point = ", config.costmap_baselink[int(cm_row), int(cm_col)])
     # print("Max and min of costmap: ", np.max(config.costmap_baselink), np.min(config.costmap_baselink))
 
-    # TODO: This should be the modified costmap from the classification subscriber
-    veg_cost = config.costmap_baselink_low[int(cm_row), int(cm_col)]
+    # Cost which only considers trajectory end point
+    # veg_cost = config.costmap_baselink_low[int(cm_row), int(cm_col)]
+    
+    # Cost which considers trajectory mid point and end point
+    veg_cost = config.costmap_baselink_low[int(cm_row), int(cm_col)] + config.costmap_baselink_low[int(cm_mid_row), int(cm_mid_col)]
 
     return veg_cost
 

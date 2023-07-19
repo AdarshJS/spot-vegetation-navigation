@@ -17,5 +17,6 @@ BASE_OUTPUT = str(EPOCHS)
 # use the base output path to derive the path to the serialized
 # model along with training history plot
 # MODEL_PATH = os.path.sep.join([BASE_OUTPUT, "siamese_model"])
-MODEL_PATH = './aug_demo_models/' + str(EPOCHS) #'/media/asathyam/Media/spot-veg/siamese_network/output/siamese_model'
+# MODEL_PATH = './aug_demo_models/' + str(EPOCHS) #'/media/asathyam/Media/spot-veg/siamese_network/output/siamese_model'
+MODEL_PATH = '/home/spotcore/catkin_ws/src/spot-vegetation-navigation/siamese_network/aug_demo_models/60_iters'
 PLOT_PATH = os.path.sep.join([MODEL_PATH, "plot.png"])

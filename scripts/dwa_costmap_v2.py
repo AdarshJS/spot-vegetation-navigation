@@ -56,7 +56,7 @@ class Config():
         self.yawrate_reso = 0.20  # [rad/s]
         
         self.dt = 0.5  # [s]
-        self.predict_time = 2.0 #3.0 #1.5  # [s]
+        self.predict_time = 3.5 #2.0 #1.5  # [s]
         
         # 1===
         self.to_goal_cost_gain = 5.0       # lower = detour
@@ -880,7 +880,7 @@ def main():
 
         # Initial
         if config.goalX == 0.0006 and config.goalY == 0.0006:
-            # print("Initial condition")
+            print("Initial condition")
             speed.linear.x = 0.0
             speed.angular.z = 0.0
             x = np.array([config.x, config.y, config.th, 0.0, 0.0])

@@ -1,0 +1,6 @@
+<launch>
+  
+  <include file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/multiview_costmap.launch"/>
+
+  <include file="/home/spotcore/pointcloud_ws/src/pointcloud_to_grid/launch/demo.launch"/>
+</launch>

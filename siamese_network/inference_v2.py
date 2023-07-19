@@ -46,10 +46,15 @@ class Data_Subscriber:
 		self.odom_topic_name = "/spot/odometry"  
 		self.classifier_topic_name = '/vegetation_classes'
 
-		choice = input("Batch Length 12 or 24 ?")
-		self.batch_length = int(choice)
+		# choice = input("Batch Length 12 or 24 ?")
+		self.batch_length =  12 #int(choice)
 
 		self.crop_top = 0.25
+
+		# dist = input("Enter image distance threshold.")
+		# self.distance_thresh = float(dist)
+
+		self.distance_thresh = 0.4
 
 		# Topic names
 		self.image_sub = rospy.Subscriber(self.img_topic_name, CompressedImage, self.img_callback, queue_size=1,buff_size=2**25)
@@ -60,22 +65,45 @@ class Data_Subscriber:
 		self.costmap_resolution = 0.05
 
 		#loading reference images for each class from a folder
-		reference_img_folder = './reference_imgs'
+		reference_img_folder = '/home/spotcore/catkin_ws/src/spot-vegetation-navigation/siamese_network/reference_imgs/aug_demo_ref_imgs'
 		self.classifier_msg = Float32MultiArray()
 
 		self.ref_1 = utils.load_reference_imgs(reference_img_folder,'bushes_2',self.image_dims)[:,:,:3]
-		self.ref_2 = utils.load_reference_imgs(reference_img_folder,'grass_dense_1',self.image_dims)[:,:,:3]
-		self.ref_3 = utils.load_reference_imgs(reference_img_folder,'grass_sparse_1',self.image_dims)[:,:,:3]
-		self.ref_4 = utils.load_reference_imgs(reference_img_folder,'trees_4',self.image_dims)[:,:,:3]
-		self.ref_5 = utils.load_reference_imgs(reference_img_folder,'dried_grass1',self.image_dims)[:,:,:3]
+		self.ref_2 = utils.load_reference_imgs(reference_img_folder,'grass_1',self.image_dims)[:,:,:3]
+		self.ref_3 = utils.load_reference_imgs(reference_img_folder,'grass_2',self.image_dims)[:,:,:3]
+		self.ref_4 = utils.load_reference_imgs(reference_img_folder,'tree_1',self.image_dims)[:,:,:3]
+		self.ref_5 = utils.load_reference_imgs(reference_img_folder,'grass_3',self.image_dims)[:,:,:3]
 
-		self.ref_6 = utils.load_reference_imgs(reference_img_folder,'trees_3_quad',self.image_dims)[:,:,:3]
-		self.ref_7 = utils.load_reference_imgs(reference_img_folder,'trees_4_quad',self.image_dims)[:,:,:3]
+		self.ref_6 = utils.load_reference_imgs(reference_img_folder,'tree_2',self.image_dims)[:,:,:3]
+		self.ref_7 = utils.load_reference_imgs(reference_img_folder,'tree_3',self.image_dims)[:,:,:3]
+
+		# print(len(self.ref_5))
+		# print(len(self.ref_3))
 
 		## load the model from disk
+
+		MODEL_FOLDER = '/home/spotcore/catkin_ws/src/spot-vegetation-navigation/siamese_network/aug_demo_models/'
+
+		model_choice = input("Load model number ? ")
+
+		if int(model_choice) == 1:
+			model_path = MODEL_FOLDER + "1_175_iters"
+		elif int(model_choice) == 2:
+			model_path = MODEL_FOLDER + "2_190_iters_w_equalization"
+		elif int(model_choice) == 3:
+			model_path = MODEL_FOLDER + "3_110_iters"
+		elif int(model_choice) == 4:
+			model_path = MODEL_FOLDER + "4_80_iters_w_equalization"
+		elif int(model_choice) == 5:
+			model_path = MODEL_FOLDER + "5_100_iters_split_dataset"
+		elif int(model_choice) == 6:
+			model_path = MODEL_FOLDER + "6_225_iters"
+		elif int(model_choice) == 7:
+			model_path = MODEL_FOLDER + "60_iters_w_equalization"
+
 		print(".... loading siamese model...")
-		print(config.MODEL_PATH)
-		self.model = load_model(config.MODEL_PATH,custom_objects={'contrastive_loss': metrics.contrastive_loss},compile=False)
+		print("Model path :", model_path)
+		self.model = load_model(model_path,custom_objects={'contrastive_loss': metrics.contrastive_loss},compile=False)
 		print("Starting Inference Code v2")
 		
 
@@ -83,7 +111,7 @@ class Data_Subscriber:
 		try:
 		# 	cv_image = self.bridge.imgmsg_to_cv2(img_data, "bgr8") # for uncompressed images
 			cv_image  = self.bridge.compressed_imgmsg_to_cv2(img_data) # for compressed images
-
+ 
 		except CvBridgeError as e:
 			print(e)
 
@@ -98,6 +126,7 @@ class Data_Subscriber:
 
 		# Generate pairs from current image and the reference images. 
 		ref_current_imgs = self.generate_pairs(cv_image)
+		# print(type(ref_current_imgs))
 
 		image = cv_image
 
@@ -266,6 +295,7 @@ class Data_Subscriber:
 			ref_current_imgs.append([crop_6_img,self.ref_3])
 
 		ref_current_imgs= np.array(ref_current_imgs)
+		# print(ref_current_imgs.shape())
 
 		# # Sanity check
 		# print("Dims of input img pairs:", np.array(ref_current_imgs).shape)
@@ -281,7 +311,7 @@ class Data_Subscriber:
 
 		# cv2.waitKey(3)
 
-		# return ref_current_imgs
+		return ref_current_imgs
 
 	def model_inference(self,ref_current_imgs):
 		#model inference for predictions
@@ -320,13 +350,13 @@ class Data_Subscriber:
 			class_val = 0
 		elif idx == 1:
 			class_val = 1
-			if pred_array[idx] <=0.4:
+			if pred_array[idx] <= self.distance_thresh:
 				quadrant = 'Pliable'#'Dense Grass'
 			else:
 				quadrant = 'Non-Pliable Grass'
 		elif idx == 2:
 			class_val = 1
-			if pred_array[idx] <=0.4:
+			if pred_array[idx] <= self.distance_thresh:
 				quadrant = 'Pliable'#'Sparse Grass'
 			else:
 				quadrant = 'Non-Pliable Sparse Grass'
@@ -349,7 +379,7 @@ class Data_Subscriber:
 	def category_selector_v2(self,pred_array):
 		class_val = 2
 		quadrant =''
-		if pred_array[0] < 0.4 or pred_array[1] < 0.4:
+		if pred_array[0] < self.distance_thresh or pred_array[1] < self.distance_thresh:
 			class_val = 1
 			quadrant = 'Pliable'
 		else:

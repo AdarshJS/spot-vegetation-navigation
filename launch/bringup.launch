@@ -1,0 +1,11 @@
+<launch>
+  <include file="/home/spotcore/catkin_ws/src/spot_ros/spot_driver/launch/driver_gait_change.launch" />
+
+  <include file="/home/spotcore/catkin_ws/src/velodyne/velodyne_pointcloud/launch/VLP16_points.launch" />
+
+  <include file="$(find realsense2_camera)/launch/rs_aligned_depth.launch" />
+
+  <!-- <include file="/home/spotcore/catkin_ws/src/spot-vegetation-navigation/multiview_costmap/multiview_costmap.launch"/>
+
+  <include file="/home/spotcore/pointcloud_ws/src/pointcloud_to_grid/launch/demo.launch"/> -->
+</launch>

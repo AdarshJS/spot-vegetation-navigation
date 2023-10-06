@@ -1,4 +1,4 @@
-global_frame: base_link
+global_frame: spot/base_link
 rolling_window: true
 
 #update_frequency: 10.0

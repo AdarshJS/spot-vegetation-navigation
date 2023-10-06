@@ -1,0 +1,34 @@
+<launch>
+  <arg name="name" default="spot"/>
+  <arg name="image_topic" default="/camera/color/image_raw/compressed"/>
+  <arg name="odom_topic" default="/spot/odom"/>
+  <arg name="lidar_topic" default="/velodyne_points"/>
+  <arg name="vegetation_classes" default="/vegetation_classes"/>
+  <arg name="pub_velocity_cmd" default="True"/>
+  <arg name="machine" default=""/>
+
+  <include file="/home/spotcore/vern_ws/src/velodyne/velodyne_pointcloud/launch/VLP16_points.launch" />
+
+  <include file="$(find realsense2_camera)/launch/rs_aligned_depth.launch" />
+
+  <include file="/home/spotcore/vern_ws/src/spot-vegetation-navigation/multiview_costmap/multiview_costmap.launch"/>
+
+  <include file="/home/spotcore/pointcloud_ws/src/pointcloud_to_grid/launch/demo.launch"/>
+
+  <node pkg="spot-vegetation-navigation" type="dwa_costmap_v3.py" name="dwa_costmap" output="screen" machine="$(arg machine)" >
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="scan_topic" value="/scan"/>
+    <param name="goal_topic" value="/$(arg name)/goto_region/goal"/>
+    <param name="vegetation_classes" value="$(arg vegetation_classes)"/>
+    <param name="pub_velocity_cmd" value="$(arg pub_velocity_cmd)"/>
+  </node>
+
+  <node pkg="spot-vegetation-navigation" type="inference_v2.py" name="data_subscriber" output="screen" machine="$(arg machine)" >
+    <param name="image_topic" value="$(arg image_topic)" />
+    <param name="lidar_topic" value="$(arg lidar_topic)" />
+    <param name="odom_topic" value="$(arg odom_topic)" />
+    <param name="vegetation_classes" value="$(arg vegetation_classes)"/>
+    <param name="model_path" value="/home/spotcore/vern_ws/src/spot-vegetation-navigation/siamese_network/aug_demo_models/60_iters_w_equalization"/>
+  </node>
+
+</launch>

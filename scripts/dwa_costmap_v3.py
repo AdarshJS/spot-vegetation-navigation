@@ -11,30 +11,32 @@
 # before beginning the loop. If you do not want obstacles, create an empty set.
 # Implentation based off Fox et al.'s paper, The Dynamic Window Approach to
 # Collision Avoidance (1997).
-
-import rospy
-import math
-import numpy as np
-from numpy.lib.stride_tricks import as_strided
-from std_msgs.msg import Float32, Float32MultiArray
-from cv_bridge import CvBridge, CvBridgeError
-
-from geometry_msgs.msg import Twist, PointStamped
-from nav_msgs.msg import OccupancyGrid, Odometry
-import sensor_msgs.msg
-from sensor_msgs.msg import LaserScan, CompressedImage
-from tf.transformations import euler_from_quaternion
-import time
-from gazebo_msgs.srv import SetModelState, SetModelStateRequest
 import sys
 import csv
+import rospy
+import math
+import time
+import numpy as np
+
+from PIL import Image
+from numpy.lib.stride_tricks import as_strided
+from cv_bridge import CvBridge, CvBridgeError
+
+from std_msgs.msg import Float32, Float32MultiArray
+from nav_msgs.msg import OccupancyGrid, Odometry
+from sensor_msgs.msg import LaserScan, CompressedImage
+from sensor_msgs.msg import Image as sensorImage
+from gazebo_msgs.srv import SetModelState, SetModelStateRequest
+from geometry_msgs.msg import Twist, PointStamped
+from tf.transformations import euler_from_quaternion
+
+from arl_nav_msgs.msg import GotoRegionActionGoal
+
 
 # Headers for local costmap subscriber
 from matplotlib import pyplot as plt
 from matplotlib.path import Path
-from PIL import Image
 
-import sys
 # OpenCV
 # sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
@@ -110,9 +112,9 @@ class Config():
         self.alpha = 0.35
         
         # For on-field visualization
-        self.plan_map_pub = rospy.Publisher("/planning_costmap", sensor_msgs.msg.Image, queue_size=10)
-        self.viz_pub = rospy.Publisher("/viz_costmap", sensor_msgs.msg.Image, queue_size=10) 
-        self.intensity_pub = rospy.Publisher("/intensity_map", sensor_msgs.msg.Image, queue_size=10) 
+        self.plan_map_pub = rospy.Publisher("/planning_costmap", sensorImage, queue_size=10)
+        self.viz_pub = rospy.Publisher("/viz_costmap", sensorImage, queue_size=10) 
+        self.intensity_pub = rospy.Publisher("/intensity_map", sensorImage, queue_size=10) 
         self.br = CvBridge()
 
 
@@ -138,17 +140,19 @@ class Config():
     def target_callback(self, data):
         print("---------------Inside Goal Callback------------------------")
 
-        radius = data.linear.x # this will be r
-        theta = data.linear.y * 0.0174533 # this will be theta
-        print("r and theta:",data.linear.x, data.linear.y)
+        self.goalX = data.goal.region_center.pose.position.x
+        self.goalY = data.goal.region_center.pose.position.y
+        # radius = data.linear.x # this will be r
+        # theta = data.linear.y * 0.0174533 # this will be theta
+        # print("r and theta:",data.linear.x, data.linear.y)
         
-        # Goal wrt robot frame        
-        goalX_rob = radius * math.cos(theta)
-        goalY_rob = radius * math.sin(theta)
+        # # Goal wrt robot frame        
+        # goalX_rob = radius * math.cos(theta)
+        # goalY_rob = radius * math.sin(theta)
 
-        # Goal wrt odom frame (from where robot started)
-        self.goalX =  self.x + goalX_rob*math.cos(self.th) - goalY_rob*math.sin(self.th)
-        self.goalY = self.y + goalX_rob*math.sin(self.th) + goalY_rob*math.cos(self.th)
+        # # Goal wrt odom frame (from where robot started)
+        # self.goalX =  self.x + goalX_rob*math.cos(self.th) - goalY_rob*math.sin(self.th)
+        # self.goalY = self.y + goalX_rob*math.sin(self.th) + goalY_rob*math.cos(self.th)
         
         # print("Self odom:",self.x, self.y)
         # print("Goals wrt odom frame:", self.goalX, self.goalY)
@@ -280,7 +284,7 @@ class Config():
     # 2===
     def classification_callback(self, data):
 
-        # print("Received classification results!")
+        print("Received classification results!")
 
         # Define grid cells belonging to each quadrant of the image
         # (col, row) convention
@@ -939,9 +943,16 @@ def main():
     config = Config()
     obs = Obstacles()
 
-    subOdom = rospy.Subscriber("/spot/odometry", Odometry, config.assignOdomCoords)
-    subLaser = rospy.Subscriber("/scan", LaserScan, obs.assignObs, config)
-    subGoal = rospy.Subscriber('/target/position', Twist, config.target_callback)
+    odom_topic = rospy.get_param("~odom_topic", "/spot/odometry")
+    scan_topic = rospy.get_param("~scan_topic", "/scan")
+    goal_topic = rospy.get_param("~goal_topic", "/target/position")
+    vegetation_classes = rospy.get_param("~vegetation_classes", "/vegetation_classes")
+    pub_velocity_cmd = rospy.get_param("~pub_velocity_cmd", "True")
+    print(goal_topic)
+
+    subOdom = rospy.Subscriber(odom_topic, Odometry, config.assignOdomCoords)
+    subLaser = rospy.Subscriber(scan_topic, LaserScan, obs.assignObs, config)
+    subGoal = rospy.Subscriber(goal_topic, GotoRegionActionGoal, config.target_callback)
 
     # Costmap callbacks
     rospy.Subscriber("/high/move_base/local_costmap/costmap", OccupancyGrid, config.high_costmap_callback)
@@ -952,11 +963,11 @@ def main():
     rospy.Subscriber("/lidargrid_i", OccupancyGrid, config.intensity_map_callback)    
     
     # subCostmap = rospy.Subscriber("/low/move_base/local_costmap/costmap", OccupancyGrid, config.costmap_callback)
-    subVegClassification = rospy.Subscriber("/vegetation_classes", Float32MultiArray, config.classification_callback)
+    subVegClassification = rospy.Subscriber(vegetation_classes, Float32MultiArray, config.classification_callback)
 
-    choice = input("Publish? 1 or 0")
-    if(int(choice) == 1):
-        pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+    # choice = input("Publish? 1 or 0")
+    if pub_velocity_cmd:
+        pub = rospy.Publisher("/spot/cmd_vel", Twist, queue_size=1)
         print("Publishing to cmd_vel")
     else:
         pub = rospy.Publisher("/dont_publish", Twist, queue_size=1)
@@ -979,7 +990,7 @@ def main():
 
         # Initial
         if config.goalX == 0.0006 and config.goalY == 0.0006:
-            print("Initial condition")
+            # print("Initial condition")
             speed.linear.x = 0.0
             speed.angular.z = 0.0
             x = np.array([config.x, config.y, config.th, 0.0, 0.0])
@@ -1019,5 +1030,5 @@ def main():
 
 
 if __name__ == '__main__':
-    rospy.init_node('dwa_costmap')
+    rospy.init_node('dwa_costmap', anonymous=True)
     main()

@@ -2,7 +2,7 @@
 
 # This is inference code v2.
 # Crops some x% off the top of the full-sized image and divides the rest into 2x3 patches.
-import sys
+
 import ctypes
 libgcc_s = ctypes.CDLL('libgcc_s.so.1')
 
@@ -15,26 +15,23 @@ from sensor_msgs.msg import Image, Imu, CompressedImage, JointState, PointCloud2
 from std_msgs.msg import Float32MultiArray
 from cv_bridge import CvBridge, CvBridgeError
 
+from pyimagesearch.siamese_network import build_siamese_model
+from pyimagesearch import config2 as config
+from pyimagesearch import utils2 as utils
+from pyimagesearch import metrics
+from pyimagesearch import mobilenetv3
 from tensorflow.keras.models import Model
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import Lambda
 from tensorflow.keras.datasets import mnist
-
-sys.path.insert(0, '/home/spotcore/vern_ws/src/spot-vegetation-navigation/siamese_network')
-
-from pyimagesearch.siamese_network import build_siamese_model
-from pyimagesearch import config2 as config
-from pyimagesearch import utils2 as utils
-from pyimagesearch import metrics
-from pyimagesearch import mobilenetv3
-
 import numpy as np
 # import tensorflow as tf
 import time
 import argparse
 
+import sys
 # sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 # import cv2
 # sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
@@ -48,7 +45,7 @@ class Data_Subscriber:
 		self.velodyne_topic_name = rospy.get_param("~lidar_topic", "/velodyne_points")
 		self.odom_topic_name = rospy.get_param("~odom_topic", "/spot/odometry")  
 		self.classifier_topic_name = rospy.get_param("~vegitation_classes", "/vegetation_classes")
-		model_path = rospy.get_param("~model_path", "/home/spotcore/vern_ws/src/spot-vegetation-navigation/siamese_network/aug_demo_models/60_iters_w_equalization")
+		model_path = rospy.get_param("~model_path", "")
 
 		# choice = input("Batch Length 12 or 24 ?")
 		self.batch_length =  12 #int(choice)
@@ -123,7 +120,7 @@ class Data_Subscriber:
 		# cv2.imshow('dst',cv_image)
 		# cv2.waitKey(3)
 
-		# print("Sequence No: ",img_data.header.seq)
+		print("Sequence No: ",img_data.header.seq)
 		(self.rows,self.cols,channels) = cv_image.shape
 		(height, width, _) = cv_image.shape
 
@@ -140,7 +137,7 @@ class Data_Subscriber:
 		predictions = self.model_inference(ref_current_imgs)
 		time2= time.time()
 		inference_time = time2 -time1
-		# print("Inference time:", inference_time)
+		print("Inference time:", inference_time)
 		# print("printing predictions........")
 		# print(predictions)
 
@@ -162,7 +159,7 @@ class Data_Subscriber:
 			quad_6,class_val_6 = self.category_selector_v2(pred6)
 
 			self.classifier_msg.data = [class_val_1, min(pred1), class_val_2, min(pred2), class_val_3, min(pred3),class_val_4, min(pred4), class_val_5, min(pred5), class_val_6, min(pred6)]
-			# print("Classifier msg:",self.classifier_msg.data)
+			print("Classifier msg:",self.classifier_msg.data)
 
 		elif self.batch_length == 24:
 
